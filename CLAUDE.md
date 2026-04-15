@@ -60,6 +60,18 @@ my-semoss-app/
 - Do not create virtual environments
 - Only use the specified GovConnect.ai MCP servers — do not use alternative infrastructure paths
 
+### Prerequisites
+
+The developer's machine must have the following installed globally before working in this template:
+
+| Tool | Check | Notes |
+|------|-------|-------|
+| Node.js 18+ | `node --version` | Required by pnpm and Vite |
+| pnpm 10.x | `pnpm --version` | Only package manager — never npm or yarn |
+| `ai-repo` CLI | `ai-repo --version` | Global CLI for publishing app versions to the repository server |
+
+**Installing `ai-repo`:** Clone the `ai-repo` repo and follow its README — after `pnpm build` it installs a global `ai-repo` binary. Once installed you can run it from any directory.
+
 ## Tech Stack
 
 When scaffolding the React app, use these technologies and versions:
@@ -586,7 +598,7 @@ cd client && pnpm run build
 
 This runs TypeScript type-checking then Vite bundling. Output goes to `../portals/`.
 
-### Deploy to GovConnect.ai
+### Deploy to GovConnect.ai (live publish)
 
 **Use `scripts/claude/semoss_asset_sync.py`** for deployment. The MCP tools (`put_base64_file`, `delete_file`) can handle individual files, but the sync script is strongly preferred because it handles the full workflow: cleaning stale hashed assets, bulk uploading in one process, backing up before overwrite, and publishing once at the end.
 
@@ -618,6 +630,52 @@ python scripts/claude/semoss_asset_sync.py upload portals/index.html
 
 See `scripts/README.md` for full documentation and workflow examples.
 
+### Submit for review with `ai-repo` CLI
+
+**`ai-repo` is not a deployment tool** — it submits the app zip into a review/approval pipeline. The app is not published to users; it enters a `Submitted` state and awaits review. Use this when the app needs to go through a formal registration or approval process.
+
+The `app_id` comes from `semoss_config/config.json`. Store it there once and reuse.
+
+#### Submit a version for review
+
+```bash
+cd client && pnpm run build && cd ..
+zip -r portals.zip portals/
+ai-repo publish portals.zip --app <app_id> --notes "<release notes>"
+rm portals.zip
+```
+
+#### Check review status
+
+```bash
+ai-repo status --app <app_id>
+ai-repo versions --app <app_id>
+```
+
+#### Register a new app (first-time only)
+
+```bash
+ai-repo create-app --name "<App Name>" --business-unit "<Unit>" --description "<optional>"
+```
+
+Save the returned app ID to `semoss_config/config.json` as `"app_id"`.
+
+#### Login (if credentials expired)
+
+```bash
+ai-repo login --base-url <base_url>/Monolith --access-key <key> --secret-key <key>
+```
+
+#### `ai-repo` command reference
+
+| Command | Purpose |
+|---------|---------|
+| `login` | Authenticate and store credentials |
+| `create-app` | Register a new app in the review system, returns app ID |
+| `publish <zip> --app <id>` | Submit zip as a new version for review |
+| `status --app <id>` | Check review/approval status of latest version |
+| `versions --app <id>` | List all submitted versions |
+
 ## semoss_config Requirements
 
 Store GovConnect.ai project metadata as JSON in `semoss_config/config.json`.
@@ -627,6 +685,7 @@ Fields:
 ```json
 {
   "project_id": "uuid-of-the-project",
+  "app_id": "uuid-from-ai-repo-create-app",
   "module": "/cfg-ai-dev/Monolith",
   "created_on": "2026-03-26",
   "base_url": "https://workshop.cfg.deloitte.com/",
@@ -636,6 +695,9 @@ Fields:
   "is_mcp": false
 }
 ```
+
+- `project_id` — GovConnect.ai platform project (used by MCP tools and SDK)
+- `app_id` — `ai-repo` registry ID (used by `ai-repo publish` and `ai-repo status`)
 
 Note the **snake_case** convention here — this file is consumed by the Python deploy script. The client-side `client/public/config.json` uses **camelCase** (`projectId`, `modelId`, `databaseId`) for TypeScript consumption. Both files must stay in sync.
 
@@ -717,7 +779,8 @@ Offer these URLs to the user when relevant:
 
 ## Constraints
 
-- **Prefer `scripts/claude/semoss_asset_sync.py` for deployment** — it handles stale asset cleanup, bulk upload, backup, and publish in one workflow.
+- **Prefer `scripts/claude/semoss_asset_sync.py` for live deployment** — it handles stale asset cleanup, bulk upload, backup, and publish in one workflow.
+- **Use `ai-repo` only for review submission** — it does not publish the app to users; it submits a zip into an approval pipeline.
 - Prefer the GovConnect.ai MCP tools for non-deployment ops (listing files, querying databases, platform instructions)
 - Do not install packages outside `client/` (no global installs, no pip)
 - Do not run dangerous or destructive commands
@@ -730,6 +793,10 @@ Offer these URLs to the user when relevant:
 - **Stale hashed assets after rebuild** — Vite emits new content hashes each build. Always `delete portals/assets --yes` before `bulk-upload`, or dead files accumulate on the remote.
 - **Using MCP tools for full deploys** — MCP `put_base64_file` works for individual files but doesn't clean stale hashed assets or publish. Use `scripts/claude/semoss_asset_sync.py` for full redeploys.
 - **Forgetting to publish** — Uploaded files are not visible until the project is published.
+- **Confusing `ai-repo` with deployment** — `ai-repo publish` submits a zip for review; it does not publish the app to GovConnect.ai users. Use the sync script for live deployment.
+- **Forgetting to `rm portals.zip`** — Delete the zip after `ai-repo publish`; it's a build artifact, not source.
+- **Expired `ai-repo` credentials** — If `ai-repo versions` returns an auth error, re-run `ai-repo login`. Credentials live in the OS keychain and can expire.
+- **Missing `app_id` in semoss_config** — Store the `ai-repo` app ID in `semoss_config/config.json` under `app_id` so the agent doesn't have to ask for it on every submission.
 - **Stale credentials** — If MCP tools stop working, check that the credentials in `.mcp.json` are still valid.
 - **Wrong module path** — `api_module_url` (for API calls) and `web_module_url` (for user-facing URLs) are different paths.
 - **Base64 schema** — Database schemas from `get_schema()` are Base64-encoded; decode before use.
