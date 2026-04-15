@@ -187,10 +187,10 @@ def build_api_endpoint(semoss_config: dict[str, str]) -> str:
     api_module_url = semoss_config.get("api_module_url", DEFAULT_API_MODULE_URL).strip()
 
     if api_module_url.startswith("http://") or api_module_url.startswith("https://"):
-        return f"{api_module_url.rstrip('/')}/api/"
+        return f"{api_module_url.rstrip('/')}/api"
 
     normalized_module = "/" + api_module_url.strip("/") if api_module_url else ""
-    return f"{base_url}{normalized_module}/api/"
+    return f"{base_url}{normalized_module}/api"
 
 
 def build_server_connection(endpoint: str, access_token: str, secret: str):
