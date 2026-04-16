@@ -30,7 +30,7 @@ Set `base_url` to your instance's hostname. For `api_module_url` and `web_module
 | Instance URL | `base_url` | `api_module_url` | `web_module_url` |
 |---|---|---|---|
 | `https://host.com/SemossWeb/...` | `https://host.com/` | `/Monolith` | `/SemossWeb` |
-| `https://host.com/cfg-ai-dev/SemossWeb/...` | `https://host.com/` | `/cfg-ai-dev/Monolith` | `/cfg-ai-dev/SemossWeb` |
+| `https://host.com/prod/SemossWeb/...` | `https://host.com/` | `/prod/Monolith` | `/prod/SemossWeb` |
 | `https://host.com/demo/SemossWeb/...` | `https://host.com/` | `/demo/Monolith` | `/demo/SemossWeb` |
 
 Update both `semoss_config/config.json` and `.mcp.json` when setting these.
