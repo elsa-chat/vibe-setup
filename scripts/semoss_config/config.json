@@ -3,8 +3,8 @@
   "app_id": "",
   "module": "app",
   "created_on": "",
-  "base_url": "https://workshop.cfg.deloitte.com/",
-  "api_module_url": "/cfg-ai-dev/Monolith",
-  "web_module_url": "/cfg-ai-dev/SemossWeb",
+  "base_url": "https://your-instance.example.com/",
+  "api_module_url": "/Monolith",
+  "web_module_url": "/SemossWeb",
   "is_mcp": false
 }

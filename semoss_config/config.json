@@ -1,9 +1,9 @@
 {
   "project_id": "",
-  "api_module_url": "/cfg-ai-dev/Monolith",
+  "api_module_url": "/Monolith",
   "created_on": "",
-  "base_url": "https://workshop.cfg.deloitte.com/",
-  "web_module_url": "/cfg-ai-dev/SemossWeb",
+  "base_url": "https://your-instance.example.com/",
+  "web_module_url": "/SemossWeb",
   "model_id": "",
   "database_id": "",
   "is_mcp": false,

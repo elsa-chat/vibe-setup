@@ -96,7 +96,7 @@ Each clone maintains its own project ID, `client/` source, and git history.
 
 | Purpose | URL |
 |---------|-----|
-| App view | `https://workshop.cfg.deloitte.com/cfg-ai-dev/SemossWeb/packages/client/dist/#/app/<project_id>/view` |
-| Database maker | `https://workshop.cfg.deloitte.com/cfg-ai-dev/SemossWeb/packages/client/dist/#/app/394404bf-02e5-44b2-bc7c-e93d9b698f58/view` |
+| App view | `<base_url><web_module_url>/packages/client/dist/#/app/<project_id>/view` |
+| Database maker | `<base_url><web_module_url>/packages/client/dist/#/app/<database_app_id>/view` |
 
 Replace `<project_id>` with the value from `semoss_config/config.json`.

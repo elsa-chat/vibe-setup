@@ -38,9 +38,9 @@ WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 CLAUDE_MCP_CONFIG_PATH = WORKSPACE_ROOT / ".mcp.json"
 COPILOT_MCP_CONFIG_PATH = WORKSPACE_ROOT / ".vscode" / "mcp.json"
 SEMOSS_CONFIG_PATH = WORKSPACE_ROOT / "semoss_config" / "config.json"
-DEFAULT_HOST = "https://workshop.cfg.deloitte.com"
-DEFAULT_API_MODULE_URL = "/cfg-ai-dev/Monolith"
-DEFAULT_WEB_MODULE_URL = "/cfg-ai-dev/SemossWeb"
+DEFAULT_HOST = "https://your-instance.example.com"
+DEFAULT_API_MODULE_URL = "/Monolith"
+DEFAULT_WEB_MODULE_URL = "/SemossWeb"
 SERVER_NAME = "Semoss_project_manager"
 BACKUP_ROOT = WORKSPACE_ROOT / "temp" / "semoss_backups"
 

@@ -1,6 +1,10 @@
 # CLAUDE.md
 
-This project builds GovConnect.ai web applications. Prefer pragmatic, reviewable changes and keep outputs concise.
+This project builds Elsa web applications. Prefer pragmatic, reviewable changes and keep outputs concise.
+
+## Platform Naming
+
+Elsa, GovConnect.ai, GovConnect, GCAI, and Semoss all refer to the same platform. Users may use any of these names — mirror their terminology in responses. Default to "Elsa" when no preference is shown.
 
 ## Key Files
 
@@ -19,15 +23,17 @@ This project builds GovConnect.ai web applications. Prefer pragmatic, reviewable
 3. **MCP connectivity** — try a GovConnect.ai MCP tool. If it fails, credentials are likely wrong.
 4. **Client dir** — if `client/` doesn't exist, offer to scaffold. If it exists but `node_modules/` is missing, run `cd client && pnpm install`.
 
-## Default GovConnect.ai Instance
+## GovConnect.ai Instance Config
 
-| Setting | Default |
-|---------|---------|
-| `base_url` | `https://workshop.cfg.deloitte.com/` |
-| `api_module_url` | `/cfg-ai-dev/Monolith` |
-| `web_module_url` | `/cfg-ai-dev/SemossWeb` |
+Set `base_url` to your instance's hostname. For `api_module_url` and `web_module_url`, look at your instance URL — if it contains a path prefix before `/Monolith` or `/SemossWeb`, include it. Examples:
 
-Update both `semoss_config/config.json` and `.mcp.json` if changed.
+| Instance URL | `base_url` | `api_module_url` | `web_module_url` |
+|---|---|---|---|
+| `https://host.com/SemossWeb/...` | `https://host.com/` | `/Monolith` | `/SemossWeb` |
+| `https://host.com/cfg-ai-dev/SemossWeb/...` | `https://host.com/` | `/cfg-ai-dev/Monolith` | `/cfg-ai-dev/SemossWeb` |
+| `https://host.com/demo/SemossWeb/...` | `https://host.com/` | `/demo/Monolith` | `/demo/SemossWeb` |
+
+Update both `semoss_config/config.json` and `.mcp.json` when setting these.
 
 ## Tech Stack (for scaffolding)
 
@@ -116,9 +122,9 @@ ai-repo login --base-url <base_url>/Monolith --access-key <key> --secret-key <ke
 {
   "project_id": "",
   "app_id": "",
-  "module": "/cfg-ai-dev/Monolith",
-  "base_url": "https://workshop.cfg.deloitte.com/",
-  "web_module_url": "/cfg-ai-dev/SemossWeb",
+  "module": "/Monolith",
+  "base_url": "https://your-instance.example.com/",
+  "web_module_url": "/SemossWeb",
   "model_id": "",
   "database_id": "",
   "created_on": "",
