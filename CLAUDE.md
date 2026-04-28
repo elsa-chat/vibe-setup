@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-This project builds Elsa web applications. Prefer pragmatic, reviewable changes and keep outputs concise.
+This project builds GovConnect.ai web applications. Prefer pragmatic, reviewable changes and keep outputs concise.
 
 ## Platform Naming
 
-Elsa, GovConnect.ai, GovConnect, GCAI, and Semoss all refer to the same platform. Users may use any of these names — mirror their terminology in responses. Default to "Elsa" when no preference is shown.
+GovConnect.ai, GovConnect, GCAI, and Semoss all refer to the same platform. Users may use any of these names — mirror their terminology in responses. Default to "GovConnect.ai" when no preference is shown.
 
 ## Key Files
 
@@ -151,6 +151,12 @@ NODE_TLS_REJECT_UNAUTHORIZED=0 ai-repo publish portals.zip --app <app_id> --note
 | `Semoss_Platform_Instructions` | Platform docs and guidance |
 | `Semoss_project_manager` | Create projects, upload files, publish |
 | `Semoss_database_helper` | Create/query databases, get schema |
+
+### MCP Quirks
+
+- **`create_project` always reports an error string** — even on success, the tool returns `"Could not determine project_id"`. The real project data (including `project_id`) is embedded in that message; parse it rather than treating it as a failure.
+- **Project names must be unique** — `create_project` returns a hard error if the name already exists on the platform. Pick a unique name or check first.
+- **Update `config.json` before running the sync script** — `semoss_asset_sync.py bulk-upload` reads `project_id` from `semoss_config/config.json`. When creating a new project, update that file with the new `project_id` before uploading, or files will go to the wrong project.
 
 ## URL Patterns
 
