@@ -9,7 +9,7 @@ Elsa, GovConnect.ai, GovConnect, GCAI, and Semoss all refer to the same platform
 ## Key Files
 
 - `semoss_config/config.json` — GovConnect.ai project metadata (`project_id`, `app_id`, `base_url`, etc.)
-- `.mcp.json` — MCP credentials (gitignored, inline Bearer tokens)
+- `.mcp.json` — MCP credentials (gitignored, inline Bearer tokens). Add `"NODE_TLS_REJECT_UNAUTHORIZED": "0"` to each server's `env` to bypass SSL verification.
 - `client/` — React app source (pnpm, Vite, TypeScript, Tailwind v4)
 - `client/vite.config.ts` — must have `base: './'` and `outDir: '../portals'`
 - `portals/` — build output (gitignored), uploaded to GovConnect.ai
@@ -92,29 +92,39 @@ python scripts/claude/semoss_asset_sync.py bulk-upload portals
 
 The sync script handles backup, upload, and publish. Don't try to replicate it with MCP tools directly.
 
+**FDA instance:** See "FDA Instance Notes" below for deployment workarounds.
+
 ### Submit for review (ai-repo)
 
 `ai-repo` submits a zip into an approval pipeline — it does **not** publish the app to users.
 
 ```bash
-# First time: register the app
-ai-repo create-app --name "<name>" --business-unit "<team>" --description "<desc>"
-# Save returned app_id to semoss_config/config.json
+# Login with project context (where AI Repository reactors are installed)
+NODE_TLS_REJECT_UNAUTHORIZED=0 ai-repo login \
+  --base-url <base_url>/Monolith \
+  --access-key <key> \
+  --secret-key <key> \
+  --project-id <app_project_id>
 
-# Submit a version
+# Create app registration
+NODE_TLS_REJECT_UNAUTHORIZED=0 ai-repo create-app \
+  --name "<name>" \
+  --business-unit "<team>" \
+  --description "<desc>"
+
+# Build and zip
 cd client && pnpm build && cd ..
-zip -r portals.zip portals/
-ai-repo publish portals.zip --app <app_id> --notes "<notes>"
-rm portals.zip
+powershell Compress-Archive -Path portals\* -DestinationPath portals.zip -Force
 
-# Check status
-ai-repo status --app <app_id>
+# Submit
+NODE_TLS_REJECT_UNAUTHORIZED=0 ai-repo publish portals.zip \
+  --app <returned_app_id> \
+  --notes "<notes>"
 ```
 
-`ai-repo` is usually already logged in. Only run `ai-repo login` if you get an auth error:
-```bash
-ai-repo login --base-url <base_url>/Monolith --access-key <key> --secret-key <key>
-```
+**Important**: `--project-id` in login must point to where AI Repository reactors are installed. Must `create-app` before first publish.
+
+**FDA instance:** See "FDA Instance Notes" below — ai-repo not available.
 
 ## semoss_config/config.json Shape
 
@@ -151,3 +161,29 @@ ai-repo login --base-url <base_url>/Monolith --access-key <key> --secret-key <ke
 ## Tagging
 
 After publishing, tag via MCP: `attach_tag(project_id, tag)`. Common tags: `approval-pending`, `approved`, `draft`, `deprecated`. Confirm with the user before applying.
+
+## FDA Instance Notes (elsa-dev.preprod.fda.gov)
+
+### SSL Certificate Handling
+Self-signed certificates require SSL bypass in multiple places:
+- `.mcp.json`: Add `"env": {"NODE_TLS_REJECT_UNAUTHORIZED": "0"}` to each MCP server
+- `ai-repo`: Prefix commands with `NODE_TLS_REJECT_UNAUTHORIZED=0`
+- Python SDK: Install `ai-server-sdk` (not `ai-server`) and handle SSL in scripts
+
+### Deployment Workflow
+
+**Required process:**
+1. Build: `cd client && pnpm build`
+2. **Manual upload** via Elsa web UI:
+   - Navigate to project in browser
+   - Upload `portals/` contents to `version/assets/portals/`
+3. Publish via MCP: `mcp__Semoss_project_manager__publish_project(project_id)`
+
+**Automated upload scripts fail** — always use manual upload via web UI.
+
+### SDK Installation
+If using `scripts/claude/semoss_asset_sync.py`:
+```bash
+pip install ai-server-sdk  # NOT ai-server
+```
+Note: Even with SDK installed, uploads fail due to SAML — use manual upload instead.
