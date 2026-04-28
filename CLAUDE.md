@@ -90,6 +90,11 @@ python scripts/claude/semoss_asset_sync.py bulk-upload portals
 
 **First deploy only:** skip the `delete` step — the remote path doesn't exist yet.
 
+**Self-signed SSL certificates (preprod):** Add `--no-verify-ssl` flag:
+```bash
+python scripts/claude/semoss_asset_sync.py bulk-upload portals --no-verify-ssl
+```
+
 The sync script handles backup, upload, and publish. Don't try to replicate it with MCP tools directly.
 
 ### Submit for review (ai-repo)
@@ -114,6 +119,12 @@ ai-repo status --app <app_id>
 `ai-repo` is usually already logged in. Only run `ai-repo login` if you get an auth error:
 ```bash
 ai-repo login --base-url <base_url>/Monolith --access-key <key> --secret-key <key>
+```
+
+**Self-signed SSL certificates (preprod):** Prefix `ai-repo` commands with `NODE_TLS_REJECT_UNAUTHORIZED=0`:
+```bash
+NODE_TLS_REJECT_UNAUTHORIZED=0 ai-repo create-app --name "..." --business-unit "..." --description "..."
+NODE_TLS_REJECT_UNAUTHORIZED=0 ai-repo publish portals.zip --app <app_id> --notes "..."
 ```
 
 ## semoss_config/config.json Shape
