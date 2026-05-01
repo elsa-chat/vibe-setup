@@ -99,12 +99,16 @@ The sync script handles backup, upload, and publish. Don't try to replicate it w
 
 ### Submit for review (ai-repo)
 
-`ai-repo` submits a zip into an approval pipeline — it does **not** publish the app to users.
+`ai-repo` submits a zip into an approval pipeline — it does **not** publish the app to users. After approval, an admin deploys server-side via `RepositoryDeployApp`, which auto-creates the SEMOSS project on the target instance.
+
+**Important: the ai-repo `app_id` IS the SEMOSS `project_id` at deploy time.** When building for ai-repo submission, the runtime config (`client/public/config.json` → `projectId`) must reference the ai-repo `app_id`, not a separately-created vibe project. The deploy reactor synthesizes the `.smss` with `PROJECT={app_id}`, so any embedded refs (FE routes, asset paths, MCP project args) need to match.
 
 ```bash
 # First time: register the app
 ai-repo create-app --name "<name>" --business-unit "<team>" --description "<desc>"
-# Save returned app_id to semoss_config/config.json
+# Save returned app_id to semoss_config/config.json — this is also the SEMOSS
+# project_id the deployed assets will live under post-approval. Set
+# client/public/config.json's projectId to this value before building.
 
 # Submit a version
 cd client && pnpm build && cd ..
@@ -115,6 +119,12 @@ rm portals.zip
 # Check status
 ai-repo status --app <app_id>
 ```
+
+After all reviews pass (Initial → Security → Final, all approved), an admin runs the deploy reactor directly via Pixel:
+```
+RepositoryDeployApp(appId="<app_id>", versionId="<version_id>")
+```
+On first deploy, SEMOSS auto-registers the project under `app_id` and grants OWNER access to the deployer + READ_ONLY access to the version's submitter. The CLI doesn't expose this step.
 
 `ai-repo` is usually already logged in. Only run `ai-repo login` if you get an auth error:
 ```bash
