@@ -74,11 +74,24 @@ Don't bake project IDs, model IDs, or module paths into the JS bundle. Fetch `co
 
 Schemas from `get_schema()` are Base64-encoded — decode before use. Write decoded schema to `semoss_config/` for reference.
 
+## Shell Environment
+
+`node`, `pnpm`, and `ai-repo` are **not** in the default Bash PATH — they're managed by NVM and pnpm's global bin. Source NVM before any shell command that needs them:
+
+```bash
+source ~/.nvm/nvm.sh
+```
+
+`ai-repo` binary: `~/Library/pnpm/ai-repo` — add `~/Library/pnpm` to PATH if needed:
+```bash
+export PATH="$HOME/Library/pnpm:$PATH"
+```
+
 ## Build & Deploy
 
 ### Build
 ```bash
-cd client && pnpm build
+source ~/.nvm/nvm.sh && cd client && pnpm build
 ```
 
 ### Live deploy (sync script)
