@@ -50,7 +50,7 @@ A template for building GovConnect.ai web applications with Claude Code. **Clone
 cd client
 pnpm install        # Install dependencies (pnpm only)
 pnpm dev        # Dev server with HMR
-pnpm build      # Type-check + build to ../portals/
+pnpm build      # Type-check + build to portals/
 pnpm fix        # Lint & format (Biome)
 pnpm test:run   # Run tests
 ```
