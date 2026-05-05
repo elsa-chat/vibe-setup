@@ -76,15 +76,23 @@ Schemas from `get_schema()` are Base64-encoded — decode before use. Write deco
 
 ## Shell Environment
 
-`node`, `pnpm`, and `ai-repo` are **not** in the default Bash PATH — they're managed by NVM and pnpm's global bin. Source NVM before any shell command that needs them:
+`node`, `pnpm`, and `ai-repo` are **not** in the default Bash PATH. NVM manages node/pnpm; `ai-repo` lives in pnpm's global bin. The Bash tool runs commands in a fresh non-interactive shell, so `~/.zshrc` is **not** loaded — you have to set everything up explicitly each time.
+
+**Use this exact prefix on every shell command** that needs node/pnpm/ai-repo (build, publish, ai-repo CLI, anything calling pnpm):
 
 ```bash
-source ~/.nvm/nvm.sh
+export NVM_DIR="$HOME/.nvm" && source "$NVM_DIR/nvm.sh" && export PATH="$HOME/Library/pnpm:$PATH"
 ```
 
-`ai-repo` binary: `~/Library/pnpm/ai-repo` — add `~/Library/pnpm` to PATH if needed:
+Common gotchas (don't repeat them):
+- `source ~/.nvm/nvm.sh` **alone** does not work — `NVM_DIR` must be set first or nvm fails to locate the installed node versions.
+- Don't try `nvm use <version>` — it errors because the version "isn't installed" in the subprocess context. The plain `source` line above auto-selects the active node.
+- The launcher at `~/Library/pnpm/ai-repo` is a shell script that itself needs node on PATH. Sourcing NVM is required even just to invoke `ai-repo`.
+
+Then commands are straightforward, e.g.:
 ```bash
-export PATH="$HOME/Library/pnpm:$PATH"
+export NVM_DIR="$HOME/.nvm" && source "$NVM_DIR/nvm.sh" && export PATH="$HOME/Library/pnpm:$PATH" && \
+  ai-repo publish --app <app_id> --notes "..."
 ```
 
 ## Build & Deploy

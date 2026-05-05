@@ -6,12 +6,23 @@ tools: Bash, Read, Edit
 
 You manage the ai-repo approval pipeline for this project. Always read `semoss_config/config.json` first to get current `app_id`, `base_url`, and `project_id`.
 
+## Shell setup (required for every command)
+
+The Bash tool runs in a non-interactive shell with **no** `~/.zshrc` loaded. `node`, `pnpm`, and `ai-repo` won't be on PATH unless you set them up explicitly. **Prefix every command with this line:**
+
+```bash
+export NVM_DIR="$HOME/.nvm" && source "$NVM_DIR/nvm.sh" && export PATH="$HOME/Library/pnpm:$PATH"
+```
+
+`ai-repo` is a shell-script launcher that itself shells out to `node`, so this prefix is required even for plain `ai-repo create-app` / `publish` / `status` calls. **Don't** try `source ~/.nvm/nvm.sh` alone (NVM_DIR must be set), and **don't** try `nvm use <version>` (errors in subprocess context — the source line auto-selects the active node).
+
 ## Workflow
 
 ### 1. Register a new app (first time only — when `app_id` is empty)
 
 ```bash
-ai-repo create-app --name "<name>" --business-unit "<team>" --description "<desc>"
+export NVM_DIR="$HOME/.nvm" && source "$NVM_DIR/nvm.sh" && export PATH="$HOME/Library/pnpm:$PATH" && \
+  ai-repo create-app --name "<name>" --business-unit "<team>" --description "<desc>"
 ```
 
 The response includes the new `app_id`. Then **two writes** are required before the first publish:
@@ -26,7 +37,8 @@ If the app name is already taken, ask the user for an alternative — names are 
 ### 2. Submit a version for review
 
 ```bash
-ai-repo publish --app <app_id> --notes "<notes>"
+export NVM_DIR="$HOME/.nvm" && source "$NVM_DIR/nvm.sh" && export PATH="$HOME/Library/pnpm:$PATH" && \
+  ai-repo publish --app <app_id> --notes "<notes>"
 ```
 
 Run from the project root. The CLI does the whole submission flow:
@@ -41,7 +53,8 @@ Use `--dry-run` to stage and inspect the zip locally without uploading.
 ### 3. Check review status
 
 ```bash
-ai-repo status --app <app_id>
+export NVM_DIR="$HOME/.nvm" && source "$NVM_DIR/nvm.sh" && export PATH="$HOME/Library/pnpm:$PATH" && \
+  ai-repo status --app <app_id>
 ```
 
 Returns the latest version's `version_id`, `version_number`, `status`, and `is_live`. Use this to grab the `version_id` if the deploy step needs it.
