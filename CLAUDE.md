@@ -75,7 +75,17 @@ outDir: '../../portals', // build output goes here (relative to src/ root)
 
 ### Runtime Config
 
-Don't bake project IDs, model IDs, or module paths into the JS bundle. Fetch `config.json` at runtime from `client/public/config.json` (Vite copies it to `portals/`). `semoss_config/config.json` uses snake_case; `client/public/config.json` uses camelCase.
+`vite.config.ts` statically bakes three env vars into the JS bundle at build time via `define`:
+
+| `.env.local` var | Source in `semoss_config/config.json` | Notes |
+|---|---|---|
+| `APP` | `app_id` | Required — empty string if unset breaks pixel calls |
+| `MODULE` | `api_module_url` | e.g. `/Monolith` or `/prod/Monolith` |
+| `ENDPOINT` | `base_url` | e.g. `https://your-instance.example.com/` |
+
+These must be set in `client/.env.local` before any build (local dev or submission). `client/.env` has `ENDPOINT` and `MODULE` committed as defaults; `APP` is intentionally left commented out — set it in `.env.local` per project.
+
+`client/public/config.json` (camelCase) is copied to `portals/` at build time and available at runtime for values that aren't baked in (e.g. `modelId`, `databaseId`). `semoss_config/config.json` (snake_case) is the source of truth for deploy tooling.
 
 ### Database Schemas
 
