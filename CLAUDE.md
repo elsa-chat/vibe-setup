@@ -76,17 +76,87 @@ Schemas from `get_schema()` are Base64-encoded — decode before use. Write deco
 
 ### Pixel calls from the FE (CSRF + SetContext)
 
-Any FE code that POSTs to `/Monolith/api/...` (i.e. anything that calls a reactor) must satisfy two contracts. This applies regardless of how the FE is structured — `client/`, hand-edited `portals/`, a separate SDK package, etc. The default template's reference implementation is at `client/src/lib/pixel.ts`; any alternative FE layout must replicate the same behaviour.
+Any FE code that POSTs to `/Monolith/api/...` (i.e. anything that calls a reactor) must satisfy two contracts, regardless of how the FE is structured (`client/`-built, hand-edited `portals/`, a separate SDK package, etc.):
 
 **1. CSRF handshake.** SEMOSS runs Tomcat's `RestCsrfPreventionFilter`. State-changing requests are rejected with `403 CSRF nonce validation failed` unless they carry a current nonce. The handshake:
 
-   1. Send any GET to a SEMOSS API endpoint with header `X-CSRF-TOKEN: Fetch` (e.g. `/api/auth/whoAmI`). The server stores a nonce on the session and echoes it back in the response's `X-CSRF-TOKEN` header. Don't worry if the GET returns 401/403 — the filter sets the response header regardless of auth.
+   1. Send any GET to a SEMOSS API endpoint with header `X-CSRF-TOKEN: Fetch` (e.g. `/api/auth/whoAmI`). The server stores a nonce on the session and echoes it back in the response's `X-CSRF-TOKEN` header. The GET can return 401/403 — Tomcat sets the response header regardless of auth.
    2. Cache the response header value for the page lifetime.
    3. Every subsequent POST/PUT/DELETE includes that value as `X-CSRF-TOKEN: <nonce>` plus `credentials: 'include'` so the JSESSIONID cookie tags along.
 
-**2. `SetContext("<projectId>")` before any project-scoped reactor.** Without it, calls like `HelloWorld()` resolve only against platform reactors and your custom reactor will fail with "unknown reactor." The reference `pixel.ts` runs `SetContext` lazily on first use, reading `projectId` from `client/public/config.json`.
+**2. `SetContext("<projectId>")` before any project-scoped reactor.** Without it, calls like `HelloWorld()` resolve only against platform reactors and your custom reactor will fail with "unknown reactor." Run `SetContext` once on first pixel call, reading `projectId` from your runtime config.
 
-If your FE replaces `pixel.ts` or doesn't go through it at all (e.g. raw `fetch` from a component), it must still do both. The most common cause of a freshly-deployed app showing CSRF 403 *or* "unknown reactor" is hand-rolled `fetch` that omits one of these steps.
+The most common cause of a freshly-deployed app showing CSRF 403 *or* "unknown reactor" is hand-rolled `fetch` that omits one of these steps.
+
+**Reference implementation** (drop into your FE wherever you keep API helpers — e.g. `client/src/lib/pixel.ts` for the default template, or anywhere else for alternative layouts):
+
+```ts
+interface AppConfig { baseUrl: string; apiModuleUrl: string; projectId?: string; }
+
+let _config: AppConfig | null = null;
+let _csrfToken: string | null = null;
+let _csrfFetchPromise: Promise<string> | null = null;
+let _contextSet = false;
+
+async function getConfig(): Promise<AppConfig> {
+  if (_config) return _config;
+  const res = await fetch('./config.json');
+  if (!res.ok) throw new Error('Failed to load config.json');
+  _config = await res.json();
+  return _config!;
+}
+
+async function fetchCsrfToken(): Promise<string> {
+  if (_csrfToken) return _csrfToken;
+  if (_csrfFetchPromise) return _csrfFetchPromise;
+  _csrfFetchPromise = (async () => {
+    const { baseUrl, apiModuleUrl } = await getConfig();
+    const url = `${baseUrl.replace(/\/$/, '')}${apiModuleUrl}/api/auth/whoAmI`;
+    const res = await fetch(url, {
+      method: 'GET',
+      credentials: 'include',
+      headers: { 'X-CSRF-TOKEN': 'Fetch' },
+    });
+    const token = res.headers.get('X-CSRF-TOKEN');
+    if (!token) throw new Error('CSRF handshake failed — server did not return X-CSRF-TOKEN.');
+    _csrfToken = token;
+    return token;
+  })();
+  try { return await _csrfFetchPromise; } finally { _csrfFetchPromise = null; }
+}
+
+async function rawRunPixel(expression: string): Promise<unknown> {
+  const { baseUrl, apiModuleUrl } = await getConfig();
+  const csrfToken = await fetchCsrfToken();
+  const url = `${baseUrl.replace(/\/$/, '')}${apiModuleUrl}/api/engine/runPixel`;
+  const res = await fetch(url, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+    body: JSON.stringify({ insight: 'new', expression }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  const json = await res.json();
+  const pixelReturn = json?.pixelReturn?.[0];
+  if (pixelReturn?.operationType?.includes('ERROR')) {
+    throw new Error(pixelReturn?.output ?? 'Pixel error');
+  }
+  return pixelReturn?.output ?? json;
+}
+
+async function ensureProjectContext(): Promise<void> {
+  if (_contextSet) return;
+  const { projectId } = await getConfig();
+  if (!projectId) { _contextSet = true; return; }
+  await rawRunPixel(`SetContext("${projectId}");`);
+  _contextSet = true;
+}
+
+export async function runPixel(expression: string): Promise<unknown> {
+  await ensureProjectContext();
+  return rawRunPixel(expression);
+}
+```
 
 ## Shell Environment
 
