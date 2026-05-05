@@ -74,6 +74,20 @@ Don't bake project IDs, model IDs, or module paths into the JS bundle. Fetch `co
 
 Schemas from `get_schema()` are Base64-encoded — decode before use. Write decoded schema to `semoss_config/` for reference.
 
+### Pixel calls from the FE (CSRF + SetContext)
+
+Any FE code that POSTs to `/Monolith/api/...` (i.e. anything that calls a reactor) must satisfy two contracts. This applies regardless of how the FE is structured — `client/`, hand-edited `portals/`, a separate SDK package, etc. The default template's reference implementation is at `client/src/lib/pixel.ts`; any alternative FE layout must replicate the same behaviour.
+
+**1. CSRF handshake.** SEMOSS runs Tomcat's `RestCsrfPreventionFilter`. State-changing requests are rejected with `403 CSRF nonce validation failed` unless they carry a current nonce. The handshake:
+
+   1. Send any GET to a SEMOSS API endpoint with header `X-CSRF-TOKEN: Fetch` (e.g. `/api/auth/whoAmI`). The server stores a nonce on the session and echoes it back in the response's `X-CSRF-TOKEN` header. Don't worry if the GET returns 401/403 — the filter sets the response header regardless of auth.
+   2. Cache the response header value for the page lifetime.
+   3. Every subsequent POST/PUT/DELETE includes that value as `X-CSRF-TOKEN: <nonce>` plus `credentials: 'include'` so the JSESSIONID cookie tags along.
+
+**2. `SetContext("<projectId>")` before any project-scoped reactor.** Without it, calls like `HelloWorld()` resolve only against platform reactors and your custom reactor will fail with "unknown reactor." The reference `pixel.ts` runs `SetContext` lazily on first use, reading `projectId` from `client/public/config.json`.
+
+If your FE replaces `pixel.ts` or doesn't go through it at all (e.g. raw `fetch` from a component), it must still do both. The most common cause of a freshly-deployed app showing CSRF 403 *or* "unknown reactor" is hand-rolled `fetch` that omits one of these steps.
+
 ## Shell Environment
 
 `node`, `pnpm`, and `ai-repo` are **not** in the default Bash PATH. NVM manages node/pnpm; `ai-repo` lives in pnpm's global bin. The Bash tool runs commands in a fresh non-interactive shell, so `~/.zshrc` is **not** loaded — you have to set everything up explicitly each time.
