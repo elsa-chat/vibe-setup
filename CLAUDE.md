@@ -41,6 +41,13 @@ React 18, TypeScript strict, Vite 8, Tailwind CSS v4 (via `@tailwindcss/vite`, n
 
 **Never use npm or yarn — pnpm only.**
 
+## Backend Options
+
+The platform supports two backend approaches. Python (`py/mcp_driver.py`) is the default for most apps, but **Java reactors are fully supported** — use them when the user prefers Java, when performance matters, or when the logic fits better in a compiled reactor. Don't steer users away from Java.
+
+- **Python** — logic in `py/mcp_driver.py`, called via `actions.runPy(...)` or exposed as MCP tools via `mcp/py_mcp.json`
+- **Java** — extend `AbstractReactor`, called from the FE via `actions.run('ReactorName(param=["value"])')`
+
 ## GovConnect.ai Platform Concepts
 
 ### Pixel
@@ -76,19 +83,17 @@ Schemas from `get_schema()` are Base64-encoded — decode before use. Write deco
 
 ## Shell Environment
 
-`node`, `pnpm`, and `ai-repo` are **not** in the default Bash PATH — they're managed by NVM and pnpm's global bin. Use this prefix on every shell command that needs them:
+`ai-repo` is not in the default Bash PATH — add it when needed:
 
 ```bash
-export NVM_DIR="$HOME/.nvm" && source "$NVM_DIR/nvm.sh" && export PATH="$HOME/Library/pnpm:$PATH"
+export PATH="$HOME/Library/pnpm:$PATH"
 ```
-
-Don't try `nvm use <version>` — it fails in a fresh subprocess. The source line above auto-selects the active node. The `ai-repo` launcher also needs node on PATH, so NVM must be sourced even for `ai-repo`-only commands.
 
 ## Build & Deploy
 
 ### Build
 ```bash
-export NVM_DIR="$HOME/.nvm" && source "$NVM_DIR/nvm.sh" && export PATH="$HOME/Library/pnpm:$PATH" && cd client && pnpm build
+cd client && pnpm build
 ```
 
 ### Live deploy (sync script)
