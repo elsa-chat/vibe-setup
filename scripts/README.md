@@ -34,7 +34,7 @@ python scripts/claude/semoss_asset_sync.py sync-from-remote portals
 ## Typical Deploy Workflow
 
 ```bash
-cd client && pnpm run build && cd ..
+cd client && pnpm build && cd ..
 python scripts/claude/semoss_asset_sync.py delete portals/assets --yes
 python scripts/claude/semoss_asset_sync.py bulk-upload portals
 ```

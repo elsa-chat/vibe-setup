@@ -21,7 +21,7 @@ GovConnect.ai, GovConnect, GCAI, and Semoss all refer to the same platform. User
 1. **Credentials** — check `.mcp.json` for placeholder values. If found, ask the user for their GovConnect.ai access key and secret key, write them as `Authorization:Bearer <key>:<secret>`, then tell the user to restart Claude Code (MCP servers only load at startup).
 2. **Project config** — read `semoss_config/config.json`. If `project_id` is empty, offer to create a new project via MCP.
 3. **MCP connectivity** — try a GovConnect.ai MCP tool. If it fails, credentials are likely wrong.
-4. **Client dir** — if `client/` doesn't exist, offer to scaffold. If it exists but `node_modules/` is missing, run `cd client && pnpm install`.
+4. **Client dir** — if `node_modules/` is missing from `client/`, run `cd client && pnpm install`.
 
 ## GovConnect.ai Instance Config
 
@@ -37,7 +37,7 @@ Update both `semoss_config/config.json` and `.mcp.json` when setting these.
 
 ## Tech Stack (for scaffolding)
 
-React 19, TypeScript strict, Vite 6+, Tailwind CSS v4 (via `@tailwindcss/vite`, not PostCSS), shadcn/ui (Base UI, `--base base`), TanStack Query v5, React Router v7, Vitest, pnpm 10.
+React 18, TypeScript strict, Vite 8, Tailwind CSS v4 (via `@tailwindcss/vite`, not PostCSS), shadcn/ui (Base UI, `--base base`), TanStack Query v5, React Router v7, Vitest, Biome, pnpm 10.
 
 **Never use npm or yarn — pnpm only.**
 
@@ -62,8 +62,8 @@ Always use `createHashRouter` — GovConnect.ai embeds apps in iframes that don'
 ### Vite Config Requirements
 
 ```typescript
-base: './',           // REQUIRED — relative paths for iframe embedding
-outDir: '../portals', // build output goes here
+base: './',             // REQUIRED — relative paths for iframe embedding
+outDir: '../../portals', // build output goes here (relative to src/ root)
 ```
 
 ### Runtime Config
