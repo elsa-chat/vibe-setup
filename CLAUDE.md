@@ -74,17 +74,110 @@ Don't bake project IDs, model IDs, or module paths into the JS bundle. Fetch `co
 
 Schemas from `get_schema()` are Base64-encoded — decode before use. Write decoded schema to `semoss_config/` for reference.
 
-## Shell Environment
+### Pixel calls from the FE (CSRF + SetContext)
 
-`node`, `pnpm`, and `ai-repo` are **not** in the default Bash PATH — they're managed by NVM and pnpm's global bin. Source NVM before any shell command that needs them:
+Any FE code that POSTs to `/Monolith/api/...` (i.e. anything that calls a reactor) must satisfy two contracts, regardless of how the FE is structured (`client/`-built, hand-edited `portals/`, a separate SDK package, etc.):
 
-```bash
-source ~/.nvm/nvm.sh
+**1. CSRF handshake.** SEMOSS runs Tomcat's `RestCsrfPreventionFilter`. State-changing requests are rejected with `403 CSRF nonce validation failed` unless they carry a current nonce. The handshake:
+
+   1. Send a GET to any SEMOSS API endpoint with header `X-CSRF-TOKEN: Fetch`. Tomcat stores a nonce on the session and echoes it back in the response's `X-CSRF-TOKEN` header. The endpoint URL doesn't matter — anything that flows through the CSRF filter works. The reference implementation reuses the `/api/engine/runPixel` URL because every SEMOSS instance has it; the GET doesn't execute any pixel and any 4xx body is fine since we only need the response header.
+   2. Cache the response header value for the page lifetime.
+   3. Every subsequent POST/PUT/DELETE includes that value as `X-CSRF-TOKEN: <nonce>` plus `credentials: 'include'` so the JSESSIONID cookie tags along.
+
+**2. `SetContext("<projectId>")` before any project-scoped reactor.** Without it, calls like `HelloWorld()` resolve only against platform reactors and your custom reactor will fail with "unknown reactor." Run `SetContext` once on first pixel call, reading `projectId` from your runtime config.
+
+The most common cause of a freshly-deployed app showing CSRF 403 *or* "unknown reactor" is hand-rolled `fetch` that omits one of these steps.
+
+**Reference implementation** (drop into your FE wherever you keep API helpers — e.g. `client/src/lib/pixel.ts` for the default template, or anywhere else for alternative layouts):
+
+```ts
+interface AppConfig { baseUrl: string; apiModuleUrl: string; projectId?: string; }
+
+let _config: AppConfig | null = null;
+let _csrfToken: string | null = null;
+let _csrfFetchPromise: Promise<string> | null = null;
+let _contextSet = false;
+
+async function getConfig(): Promise<AppConfig> {
+  if (_config) return _config;
+  const res = await fetch('./config.json');
+  if (!res.ok) throw new Error('Failed to load config.json');
+  _config = await res.json();
+  return _config!;
+}
+
+async function fetchCsrfToken(): Promise<string> {
+  if (_csrfToken) return _csrfToken;
+  if (_csrfFetchPromise) return _csrfFetchPromise;
+  _csrfFetchPromise = (async () => {
+    const { baseUrl, apiModuleUrl } = await getConfig();
+    // Any URL through the CSRF filter works; runPixel is universal.
+    const url = `${baseUrl.replace(/\/$/, '')}${apiModuleUrl}/api/engine/runPixel`;
+    const res = await fetch(url, {
+      method: 'GET',
+      credentials: 'include',
+      headers: { 'X-CSRF-TOKEN': 'Fetch' },
+    });
+    const token = res.headers.get('X-CSRF-TOKEN');
+    if (!token) throw new Error('CSRF handshake failed — server did not return X-CSRF-TOKEN.');
+    _csrfToken = token;
+    return token;
+  })();
+  try { return await _csrfFetchPromise; } finally { _csrfFetchPromise = null; }
+}
+
+async function rawRunPixel(expression: string): Promise<unknown> {
+  const { baseUrl, apiModuleUrl } = await getConfig();
+  const csrfToken = await fetchCsrfToken();
+  const url = `${baseUrl.replace(/\/$/, '')}${apiModuleUrl}/api/engine/runPixel`;
+  const res = await fetch(url, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+    body: JSON.stringify({ insight: 'new', expression }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  const json = await res.json();
+  const pixelReturn = json?.pixelReturn?.[0];
+  if (pixelReturn?.operationType?.includes('ERROR')) {
+    throw new Error(pixelReturn?.output ?? 'Pixel error');
+  }
+  return pixelReturn?.output ?? json;
+}
+
+async function ensureProjectContext(): Promise<void> {
+  if (_contextSet) return;
+  const { projectId } = await getConfig();
+  if (!projectId) { _contextSet = true; return; }
+  await rawRunPixel(`SetContext("${projectId}");`);
+  _contextSet = true;
+}
+
+export async function runPixel(expression: string): Promise<unknown> {
+  await ensureProjectContext();
+  return rawRunPixel(expression);
+}
 ```
 
-`ai-repo` binary: `~/Library/pnpm/ai-repo` — add `~/Library/pnpm` to PATH if needed:
+## Shell Environment
+
+`node`, `pnpm`, and `ai-repo` are **not** in the default Bash PATH. NVM manages node/pnpm; `ai-repo` lives in pnpm's global bin. The Bash tool runs commands in a fresh non-interactive shell, so `~/.zshrc` is **not** loaded — you have to set everything up explicitly each time.
+
+**Use this exact prefix on every shell command** that needs node/pnpm/ai-repo (build, publish, ai-repo CLI, anything calling pnpm):
+
 ```bash
-export PATH="$HOME/Library/pnpm:$PATH"
+export NVM_DIR="$HOME/.nvm" && source "$NVM_DIR/nvm.sh" && export PATH="$HOME/Library/pnpm:$PATH"
+```
+
+Common gotchas (don't repeat them):
+- `source ~/.nvm/nvm.sh` **alone** does not work — `NVM_DIR` must be set first or nvm fails to locate the installed node versions.
+- Don't try `nvm use <version>` — it errors because the version "isn't installed" in the subprocess context. The plain `source` line above auto-selects the active node.
+- The launcher at `~/Library/pnpm/ai-repo` is a shell script that itself needs node on PATH. Sourcing NVM is required even just to invoke `ai-repo`.
+
+Then commands are straightforward, e.g.:
+```bash
+export NVM_DIR="$HOME/.nvm" && source "$NVM_DIR/nvm.sh" && export PATH="$HOME/Library/pnpm:$PATH" && \
+  ai-repo publish --app <app_id> --notes "..."
 ```
 
 ## Build & Deploy
@@ -123,11 +216,19 @@ ai-repo create-app --name "<name>" --business-unit "<team>" --description "<desc
 # project_id the deployed assets will live under post-approval. Set
 # client/public/config.json's projectId to this value before building.
 
-# Submit a version
-cd client && pnpm build && cd ..
-zip -r portals.zip portals/
-ai-repo publish portals.zip --app <app_id> --notes "<notes>"
-rm portals.zip
+# Submit a version — run from the project root.
+# The CLI handles build + staging + zipping. It detects client/package.json
+# with a build script and runs the FE build (pnpm/yarn/npm chosen by lockfile),
+# then stages the project folders (portals/, client/, java/, py/, mcp/,
+# semoss_config/, ...) into a submission zip and uploads. There is no
+# assets/ wrapper to construct manually.
+#
+# Excluded automatically: node_modules/, .git/, dist/, build/, target/,
+# pom.xml, .env, OS junk.
+ai-repo publish --app <app_id> --notes "<notes>"
+
+# Skip the build step when portals/ is already current:
+# ai-repo publish --app <app_id> --skip-build --notes "<notes>"
 
 # Check status
 ai-repo status --app <app_id>
@@ -137,7 +238,7 @@ After all reviews pass (Initial → Security → Final, all approved), an admin 
 ```
 RepositoryDeployApp(appId="<app_id>", versionId="<version_id>")
 ```
-On first deploy, SEMOSS auto-registers the project under `app_id` and grants OWNER access to the deployer + READ_ONLY access to the version's submitter. The CLI doesn't expose this step.
+This is end-to-end — synthesizes the `.smss`, registers the project, flips the version to live, and publishes the portal to end users (no manual `PublishProject` follow-up needed). On first deploy, SEMOSS grants OWNER access to the deployer and READ_ONLY access to the version's submitter. The CLI doesn't expose this step.
 
 `ai-repo` is usually already logged in. Only run `ai-repo login` if you get an auth error:
 ```bash
@@ -147,7 +248,7 @@ ai-repo login --base-url <base_url>/Monolith --access-key <key> --secret-key <ke
 **Self-signed SSL certificates (preprod):** Prefix `ai-repo` commands with `NODE_TLS_REJECT_UNAUTHORIZED=0`:
 ```bash
 NODE_TLS_REJECT_UNAUTHORIZED=0 ai-repo create-app --name "..." --business-unit "..." --description "..."
-NODE_TLS_REJECT_UNAUTHORIZED=0 ai-repo publish portals.zip --app <app_id> --notes "..."
+NODE_TLS_REJECT_UNAUTHORIZED=0 ai-repo publish --app <app_id> --notes "..."
 ```
 
 ## semoss_config/config.json Shape
