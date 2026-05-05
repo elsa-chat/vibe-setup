@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-This project builds Elsa web applications. Prefer pragmatic, reviewable changes and keep outputs concise.
+This project builds GovConnect.ai web applications. Prefer pragmatic, reviewable changes and keep outputs concise.
 
 ## Platform Naming
 
-Elsa, GovConnect.ai, GovConnect, GCAI, and Semoss all refer to the same platform. Users may use any of these names — mirror their terminology in responses. Default to "Elsa" when no preference is shown.
+GovConnect.ai, GovConnect, GCAI, and Semoss all refer to the same platform. Users may use any of these names — mirror their terminology in responses. Default to "GovConnect.ai" when no preference is shown.
 
 ## Key Files
 
@@ -74,11 +74,24 @@ Don't bake project IDs, model IDs, or module paths into the JS bundle. Fetch `co
 
 Schemas from `get_schema()` are Base64-encoded — decode before use. Write decoded schema to `semoss_config/` for reference.
 
+## Shell Environment
+
+`node`, `pnpm`, and `ai-repo` are **not** in the default Bash PATH — they're managed by NVM and pnpm's global bin. Source NVM before any shell command that needs them:
+
+```bash
+source ~/.nvm/nvm.sh
+```
+
+`ai-repo` binary: `~/Library/pnpm/ai-repo` — add `~/Library/pnpm` to PATH if needed:
+```bash
+export PATH="$HOME/Library/pnpm:$PATH"
+```
+
 ## Build & Deploy
 
 ### Build
 ```bash
-cd client && pnpm build
+source ~/.nvm/nvm.sh && cd client && pnpm build
 ```
 
 ### Live deploy (sync script)
@@ -90,16 +103,25 @@ python scripts/claude/semoss_asset_sync.py bulk-upload portals
 
 **First deploy only:** skip the `delete` step — the remote path doesn't exist yet.
 
+**Self-signed SSL certificates (preprod):** Add `--no-verify-ssl` flag:
+```bash
+python scripts/claude/semoss_asset_sync.py bulk-upload portals --no-verify-ssl
+```
+
 The sync script handles backup, upload, and publish. Don't try to replicate it with MCP tools directly.
 
 ### Submit for review (ai-repo)
 
-`ai-repo` submits a zip into an approval pipeline — it does **not** publish the app to users.
+`ai-repo` submits a zip into an approval pipeline — it does **not** publish the app to users. After approval, an admin deploys server-side via `RepositoryDeployApp`, which auto-creates the SEMOSS project on the target instance.
+
+**Important: the ai-repo `app_id` IS the SEMOSS `project_id` at deploy time.** When building for ai-repo submission, the runtime config (`client/public/config.json` → `projectId`) must reference the ai-repo `app_id`, not a separately-created vibe project. The deploy reactor synthesizes the `.smss` with `PROJECT={app_id}`, so any embedded refs (FE routes, asset paths, MCP project args) need to match.
 
 ```bash
 # First time: register the app
 ai-repo create-app --name "<name>" --business-unit "<team>" --description "<desc>"
-# Save returned app_id to semoss_config/config.json
+# Save returned app_id to semoss_config/config.json — this is also the SEMOSS
+# project_id the deployed assets will live under post-approval. Set
+# client/public/config.json's projectId to this value before building.
 
 # Submit a version
 cd client && pnpm build && cd ..
@@ -111,9 +133,21 @@ rm portals.zip
 ai-repo status --app <app_id>
 ```
 
+After all reviews pass (Initial → Security → Final, all approved), an admin runs the deploy reactor directly via Pixel:
+```
+RepositoryDeployApp(appId="<app_id>", versionId="<version_id>")
+```
+On first deploy, SEMOSS auto-registers the project under `app_id` and grants OWNER access to the deployer + READ_ONLY access to the version's submitter. The CLI doesn't expose this step.
+
 `ai-repo` is usually already logged in. Only run `ai-repo login` if you get an auth error:
 ```bash
 ai-repo login --base-url <base_url>/Monolith --access-key <key> --secret-key <key>
+```
+
+**Self-signed SSL certificates (preprod):** Prefix `ai-repo` commands with `NODE_TLS_REJECT_UNAUTHORIZED=0`:
+```bash
+NODE_TLS_REJECT_UNAUTHORIZED=0 ai-repo create-app --name "..." --business-unit "..." --description "..."
+NODE_TLS_REJECT_UNAUTHORIZED=0 ai-repo publish portals.zip --app <app_id> --notes "..."
 ```
 
 ## semoss_config/config.json Shape
@@ -140,6 +174,12 @@ ai-repo login --base-url <base_url>/Monolith --access-key <key> --secret-key <ke
 | `Semoss_Platform_Instructions` | Platform docs and guidance |
 | `Semoss_project_manager` | Create projects, upload files, publish |
 | `Semoss_database_helper` | Create/query databases, get schema |
+
+### MCP Quirks
+
+- **`create_project` always reports an error string** — even on success, the tool returns `"Could not determine project_id"`. The real project data (including `project_id`) is embedded in that message; parse it rather than treating it as a failure.
+- **Project names must be unique** — `create_project` returns a hard error if the name already exists on the platform. Pick a unique name or check first.
+- **Update `config.json` before running the sync script** — `semoss_asset_sync.py bulk-upload` reads `project_id` from `semoss_config/config.json`. When creating a new project, update that file with the new `project_id` before uploading, or files will go to the wrong project.
 
 ## URL Patterns
 

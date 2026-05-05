@@ -193,7 +193,41 @@ def build_api_endpoint(semoss_config: dict[str, str]) -> str:
     return f"{base_url}{normalized_module}/api"
 
 
-def build_server_connection(endpoint: str, access_token: str, secret: str):
+def build_server_connection(endpoint: str, access_token: str, secret: str, verify_ssl: bool = True):
+    if not verify_ssl:
+        import ssl
+        import urllib3
+
+        # Disable SSL verification globally
+        ssl._create_default_https_context = ssl._create_unverified_context
+
+        # Disable SSL warnings
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+        # Patch requests library if available
+        if requests is not None:
+            import warnings
+
+            # Suppress all urllib3 SSL warnings
+            try:
+                from requests.packages.urllib3.exceptions import InsecureRequestWarning
+                warnings.simplefilter('ignore', InsecureRequestWarning)
+            except ImportError:
+                pass
+
+            try:
+                from urllib3.exceptions import InsecureRequestWarning
+                warnings.simplefilter('ignore', InsecureRequestWarning)
+            except ImportError:
+                pass
+
+            # Monkey-patch requests.Session to always use verify=False
+            original_request = requests.Session.request
+            def patched_request(self, method, url, **kwargs):
+                kwargs['verify'] = False
+                return original_request(self, method, url, **kwargs)
+            requests.Session.request = patched_request
+
     try:
         from ai_server import ServerClient
     except ImportError as exc:
@@ -601,6 +635,11 @@ COMMAND_NAMES = frozenset(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Upload local assets to SEMOSS or sync remote assets to local.")
+    parser.add_argument(
+        "--no-verify-ssl",
+        action="store_true",
+        help="Disable SSL certificate verification (use for self-signed certificates).",
+    )
     subparsers = parser.add_subparsers(dest="command")
 
     upload_parser = subparsers.add_parser("upload", help="Upload a single local file into the linked SEMOSS project.")
@@ -664,7 +703,7 @@ def build_parser() -> argparse.ArgumentParser:
 def parse_args() -> argparse.Namespace:
     parser = build_parser()
     raw_args = sys.argv[1:]
-    if raw_args and raw_args[0] not in COMMAND_NAMES and raw_args[0] not in {"-h", "--help"}:
+    if raw_args and raw_args[0] not in COMMAND_NAMES and raw_args[0] not in {"-h", "--help", "--no-verify-ssl"}:
         raw_args = ["upload", *raw_args]
     if not raw_args:
         parser.print_help()
@@ -672,7 +711,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args(raw_args)
 
 
-def build_semoss_context() -> tuple[dict[str, str], str, object]:
+def build_semoss_context(verify_ssl: bool = True) -> tuple[dict[str, str], str, object]:
     semoss_config = load_semoss_config(SEMOSS_CONFIG_PATH)
     access_token, secret = load_bearer_parts(CLAUDE_MCP_CONFIG_PATH, COPILOT_MCP_CONFIG_PATH)
 
@@ -684,6 +723,7 @@ def build_semoss_context() -> tuple[dict[str, str], str, object]:
         endpoint=build_api_endpoint(semoss_config),
         access_token=access_token,
         secret=secret,
+        verify_ssl=verify_ssl,
     )
     return semoss_config, project_id, server_connection
 
@@ -756,8 +796,8 @@ def upload_local_file_to_semoss(
     return 0
 
 
-def sync_semoss_folder_to_local(remote_folder: str, local_dir: str | None, overwrite: bool) -> int:
-    _, project_id, server_connection = build_semoss_context()
+def sync_semoss_folder_to_local(remote_folder: str, local_dir: str | None, overwrite: bool, verify_ssl: bool = True) -> int:
+    _, project_id, server_connection = build_semoss_context(verify_ssl=verify_ssl)
     normalized_remote_path = normalize_remote_asset_path(remote_folder)
     target_local_dir = Path(local_dir).expanduser().resolve() if local_dir else default_local_path_for_remote(normalized_remote_path)
 
@@ -775,8 +815,8 @@ def sync_semoss_folder_to_local(remote_folder: str, local_dir: str | None, overw
     return 0
 
 
-def delete_remote_assets(remote_path: str, skip_confirm: bool) -> int:
-    _, project_id, server_connection = build_semoss_context()
+def delete_remote_assets(remote_path: str, skip_confirm: bool, verify_ssl: bool = True) -> int:
+    _, project_id, server_connection = build_semoss_context(verify_ssl=verify_ssl)
     normalized = normalize_remote_asset_path(remote_path)
 
     entry = get_remote_asset_entry(server_connection, project_id, normalized)
@@ -839,13 +879,14 @@ def bulk_upload_command(
     *,
     no_publish: bool,
     no_delete_existing: bool,
+    verify_ssl: bool = True,
 ) -> int:
     files = collect_files_from_paths(raw_paths)
     if not files:
         print("No files matched the provided paths.")
         return 0
 
-    _, project_id, server_connection = build_semoss_context()
+    _, project_id, server_connection = build_semoss_context(verify_ssl=verify_ssl)
     return bulk_upload_to_semoss(
         local_files=files,
         project_id=project_id,
@@ -855,8 +896,8 @@ def bulk_upload_command(
     )
 
 
-def publish_command() -> int:
-    _, project_id, server_connection = build_semoss_context()
+def publish_command(verify_ssl: bool = True) -> int:
+    _, project_id, server_connection = build_semoss_context(verify_ssl=verify_ssl)
     print(f"Publishing project {project_id}...")
     result = publish_project(server_connection, project_id)
     print(json.dumps(result, indent=2, default=str))
@@ -865,24 +906,26 @@ def publish_command() -> int:
 
 def main() -> int:
     args = parse_args()
+    verify_ssl = not args.no_verify_ssl
 
     if args.command == "sync-from-remote":
-        return sync_semoss_folder_to_local(args.remote_folder, args.local_dir, args.overwrite)
+        return sync_semoss_folder_to_local(args.remote_folder, args.local_dir, args.overwrite, verify_ssl=verify_ssl)
 
     if args.command == "delete":
-        return delete_remote_assets(args.remote_path, args.yes)
+        return delete_remote_assets(args.remote_path, args.yes, verify_ssl=verify_ssl)
 
     if args.command == "bulk-upload":
         return bulk_upload_command(
             args.paths,
             no_publish=args.no_publish,
             no_delete_existing=args.no_delete_existing,
+            verify_ssl=verify_ssl,
         )
 
     if args.command == "publish":
-        return publish_command()
+        return publish_command(verify_ssl=verify_ssl)
 
-    _, project_id, server_connection = build_semoss_context()
+    _, project_id, server_connection = build_semoss_context(verify_ssl=verify_ssl)
     local_file = Path(args.file).expanduser().resolve()
     return upload_local_file_to_semoss(
         local_file,
