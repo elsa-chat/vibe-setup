@@ -80,7 +80,7 @@ Any FE code that POSTs to `/Monolith/api/...` (i.e. anything that calls a reacto
 
 **1. CSRF handshake.** SEMOSS runs Tomcat's `RestCsrfPreventionFilter`. State-changing requests are rejected with `403 CSRF nonce validation failed` unless they carry a current nonce. The handshake:
 
-   1. Send any GET to a SEMOSS API endpoint with header `X-CSRF-TOKEN: Fetch` (e.g. `/api/auth/whoAmI`). The server stores a nonce on the session and echoes it back in the response's `X-CSRF-TOKEN` header. The GET can return 401/403 — Tomcat sets the response header regardless of auth.
+   1. Send a GET to any SEMOSS API endpoint with header `X-CSRF-TOKEN: Fetch`. Tomcat stores a nonce on the session and echoes it back in the response's `X-CSRF-TOKEN` header. The endpoint URL doesn't matter — anything that flows through the CSRF filter works. The reference implementation reuses the `/api/engine/runPixel` URL because every SEMOSS instance has it; the GET doesn't execute any pixel and any 4xx body is fine since we only need the response header.
    2. Cache the response header value for the page lifetime.
    3. Every subsequent POST/PUT/DELETE includes that value as `X-CSRF-TOKEN: <nonce>` plus `credentials: 'include'` so the JSESSIONID cookie tags along.
 
@@ -111,7 +111,8 @@ async function fetchCsrfToken(): Promise<string> {
   if (_csrfFetchPromise) return _csrfFetchPromise;
   _csrfFetchPromise = (async () => {
     const { baseUrl, apiModuleUrl } = await getConfig();
-    const url = `${baseUrl.replace(/\/$/, '')}${apiModuleUrl}/api/auth/whoAmI`;
+    // Any URL through the CSRF filter works; runPixel is universal.
+    const url = `${baseUrl.replace(/\/$/, '')}${apiModuleUrl}/api/engine/runPixel`;
     const res = await fetch(url, {
       method: 'GET',
       credentials: 'include',
