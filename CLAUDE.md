@@ -123,11 +123,19 @@ ai-repo create-app --name "<name>" --business-unit "<team>" --description "<desc
 # project_id the deployed assets will live under post-approval. Set
 # client/public/config.json's projectId to this value before building.
 
-# Submit a version
-cd client && pnpm build && cd ..
-zip -r portals.zip portals/
-ai-repo publish portals.zip --app <app_id> --notes "<notes>"
-rm portals.zip
+# Submit a version — run from the project root.
+# The CLI handles build + staging + zipping. It detects client/package.json
+# with a build script and runs the FE build (pnpm/yarn/npm chosen by lockfile),
+# then stages the project folders (portals/, client/, java/, py/, mcp/,
+# semoss_config/, ...) into a submission zip and uploads. There is no
+# assets/ wrapper to construct manually.
+#
+# Excluded automatically: node_modules/, .git/, dist/, build/, target/,
+# pom.xml, .env, OS junk.
+ai-repo publish --app <app_id> --notes "<notes>"
+
+# Skip the build step when portals/ is already current:
+# ai-repo publish --app <app_id> --skip-build --notes "<notes>"
 
 # Check status
 ai-repo status --app <app_id>
@@ -137,7 +145,7 @@ After all reviews pass (Initial → Security → Final, all approved), an admin 
 ```
 RepositoryDeployApp(appId="<app_id>", versionId="<version_id>")
 ```
-On first deploy, SEMOSS auto-registers the project under `app_id` and grants OWNER access to the deployer + READ_ONLY access to the version's submitter. The CLI doesn't expose this step.
+This is end-to-end — synthesizes the `.smss`, registers the project, flips the version to live, and publishes the portal to end users (no manual `PublishProject` follow-up needed). On first deploy, SEMOSS grants OWNER access to the deployer and READ_ONLY access to the version's submitter. The CLI doesn't expose this step.
 
 `ai-repo` is usually already logged in. Only run `ai-repo login` if you get an auth error:
 ```bash
@@ -147,7 +155,7 @@ ai-repo login --base-url <base_url>/Monolith --access-key <key> --secret-key <ke
 **Self-signed SSL certificates (preprod):** Prefix `ai-repo` commands with `NODE_TLS_REJECT_UNAUTHORIZED=0`:
 ```bash
 NODE_TLS_REJECT_UNAUTHORIZED=0 ai-repo create-app --name "..." --business-unit "..." --description "..."
-NODE_TLS_REJECT_UNAUTHORIZED=0 ai-repo publish portals.zip --app <app_id> --notes "..."
+NODE_TLS_REJECT_UNAUTHORIZED=0 ai-repo publish --app <app_id> --notes "..."
 ```
 
 ## semoss_config/config.json Shape
