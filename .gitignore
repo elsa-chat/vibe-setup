@@ -21,6 +21,9 @@ portals/
 .env.prod
 .env.*.local
 
+# Per-environment GovConnect.ai credentials
+semoss_config/credentials.env
+
 # Temporary files and backups
 temp/
 
