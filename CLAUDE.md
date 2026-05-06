@@ -19,9 +19,11 @@ GovConnect.ai, GovConnect, GCAI, and Semoss all refer to the same platform. User
 
 ## Startup Checklist
 
+When the user wants to build or deploy a GovConnect.ai app, run these steps before proceeding. If MCP connectivity isn't available, note it and continue — not every user has platform access.
+
 1. **Credentials** — check `.mcp.json` for placeholder values. If found, ask the user for their GovConnect.ai access key and secret key, write them as `Authorization:Bearer <key>:<secret>`, then tell the user to restart Claude Code (MCP servers only load at startup).
 2. **Project config** — read `semoss_config/environments.json`. If it has no envs configured, offer to set one up. Check that `semoss_config/credentials.env` exists — if not, ask the user for their keys and create it from `semoss_config/credentials.env.example`.
-3. **MCP connectivity** — try a GovConnect.ai MCP tool. If it fails, credentials are likely wrong.
+3. **MCP connectivity** — call `get_agent_platform_instructions` to verify the MCP servers are reachable. If it fails, credentials in `.mcp.json` are likely wrong. Don't block on this — continue if the user doesn't have access.
 4. **Client dir** — if `node_modules/` is missing from `client/`, run `cd client && pnpm install`.
 
 ## GovConnect.ai Instance Config
