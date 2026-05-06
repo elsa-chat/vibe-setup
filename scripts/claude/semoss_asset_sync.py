@@ -38,6 +38,8 @@ WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 CLAUDE_MCP_CONFIG_PATH = WORKSPACE_ROOT / ".mcp.json"
 COPILOT_MCP_CONFIG_PATH = WORKSPACE_ROOT / ".vscode" / "mcp.json"
 SEMOSS_CONFIG_PATH = WORKSPACE_ROOT / "semoss_config" / "config.json"
+ENVIRONMENTS_CONFIG_PATH = WORKSPACE_ROOT / "semoss_config" / "environments.json"
+CREDENTIALS_ENV_PATH = WORKSPACE_ROOT / "semoss_config" / "credentials.env"
 DEFAULT_HOST = "https://your-instance.example.com"
 DEFAULT_API_MODULE_URL = "/Monolith"
 DEFAULT_WEB_MODULE_URL = "/SemossWeb"
@@ -122,6 +124,65 @@ def load_semoss_config(config_path: Path) -> dict[str, str]:
         )
         or DEFAULT_WEB_MODULE_URL,
     }
+
+
+def parse_dotenv(env_path: Path) -> dict[str, str]:
+    """Parse a .env-style file into a dict, skipping blank lines and comments."""
+    result = {}
+    if not env_path.exists():
+        return result
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" in line:
+            key, _, value = line.partition("=")
+            result[key.strip()] = value.strip()
+    return result
+
+
+def load_env_config(env_name: str) -> dict[str, str]:
+    """Load endpoint and project config for a named env from environments.json."""
+    if not ENVIRONMENTS_CONFIG_PATH.exists():
+        raise SystemExit(
+            "semoss_config/environments.json not found. "
+            "Create it from the template — see semoss_config/environments.json in the repo."
+        )
+    data = json.loads(ENVIRONMENTS_CONFIG_PATH.read_text(encoding="utf-8"))
+    envs = data.get("envs", {})
+    if env_name not in envs:
+        available = ", ".join(envs.keys()) if envs else "none defined"
+        raise SystemExit(
+            f"Environment '{env_name}' not found in semoss_config/environments.json. "
+            f"Available: {available}"
+        )
+    env = envs[env_name]
+    return {
+        "project_id": str(env.get("project_id") or ""),
+        "app_id": str(env.get("app_id") or ""),
+        "base_url": str(env.get("base_url") or DEFAULT_HOST),
+        "api_module_url": str(env.get("api_module_url") or DEFAULT_API_MODULE_URL),
+        "web_module_url": str(env.get("web_module_url") or DEFAULT_WEB_MODULE_URL),
+    }
+
+
+def load_env_credentials(env_name: str) -> tuple[str, str]:
+    """Load access_key and secret_key for a named env from credentials.env."""
+    if not CREDENTIALS_ENV_PATH.exists():
+        raise SystemExit(
+            "semoss_config/credentials.env not found. "
+            "Copy semoss_config/credentials.env.example to semoss_config/credentials.env and fill in your keys."
+        )
+    env_vars = parse_dotenv(CREDENTIALS_ENV_PATH)
+    prefix = env_name.upper()
+    access_key = env_vars.get(f"{prefix}_ACCESS_KEY", "")
+    secret_key = env_vars.get(f"{prefix}_SECRET_KEY", "")
+    if not access_key or not secret_key:
+        raise SystemExit(
+            f"Credentials for environment '{env_name}' not found in semoss_config/credentials.env. "
+            f"Expected {prefix}_ACCESS_KEY and {prefix}_SECRET_KEY."
+        )
+    return access_key, secret_key
 
 
 def _extract_bearer_parts_from_server(server: dict) -> tuple[str, str]:
@@ -640,6 +701,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Disable SSL certificate verification (use for self-signed certificates).",
     )
+    parser.add_argument(
+        "--env",
+        metavar="ENV",
+        help=(
+            "Target environment name from semoss_config/environments.json (e.g. dev, prod). "
+            "Reads credentials from semoss_config/credentials.env. "
+            "Falls back to semoss_config/config.json + .mcp.json if omitted."
+        ),
+    )
     subparsers = parser.add_subparsers(dest="command")
 
     upload_parser = subparsers.add_parser("upload", help="Upload a single local file into the linked SEMOSS project.")
@@ -711,13 +781,18 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args(raw_args)
 
 
-def build_semoss_context(verify_ssl: bool = True) -> tuple[dict[str, str], str, object]:
-    semoss_config = load_semoss_config(SEMOSS_CONFIG_PATH)
-    access_token, secret = load_bearer_parts(CLAUDE_MCP_CONFIG_PATH, COPILOT_MCP_CONFIG_PATH)
+def build_semoss_context(verify_ssl: bool = True, env_name: str | None = None) -> tuple[dict[str, str], str, object]:
+    if env_name:
+        semoss_config = load_env_config(env_name)
+        access_token, secret = load_env_credentials(env_name)
+    else:
+        semoss_config = load_semoss_config(SEMOSS_CONFIG_PATH)
+        access_token, secret = load_bearer_parts(CLAUDE_MCP_CONFIG_PATH, COPILOT_MCP_CONFIG_PATH)
 
     project_id = semoss_config.get("project_id")
     if not project_id:
-        raise SystemExit("project_id was not found in semoss_config/config.json.")
+        config_hint = f"semoss_config/environments.json (env: {env_name})" if env_name else "semoss_config/config.json"
+        raise SystemExit(f"project_id is not set in {config_hint}.")
 
     server_connection = build_server_connection(
         endpoint=build_api_endpoint(semoss_config),
@@ -796,8 +871,8 @@ def upload_local_file_to_semoss(
     return 0
 
 
-def sync_semoss_folder_to_local(remote_folder: str, local_dir: str | None, overwrite: bool, verify_ssl: bool = True) -> int:
-    _, project_id, server_connection = build_semoss_context(verify_ssl=verify_ssl)
+def sync_semoss_folder_to_local(remote_folder: str, local_dir: str | None, overwrite: bool, verify_ssl: bool = True, env_name: str | None = None) -> int:
+    _, project_id, server_connection = build_semoss_context(verify_ssl=verify_ssl, env_name=env_name)
     normalized_remote_path = normalize_remote_asset_path(remote_folder)
     target_local_dir = Path(local_dir).expanduser().resolve() if local_dir else default_local_path_for_remote(normalized_remote_path)
 
@@ -815,8 +890,8 @@ def sync_semoss_folder_to_local(remote_folder: str, local_dir: str | None, overw
     return 0
 
 
-def delete_remote_assets(remote_path: str, skip_confirm: bool, verify_ssl: bool = True) -> int:
-    _, project_id, server_connection = build_semoss_context(verify_ssl=verify_ssl)
+def delete_remote_assets(remote_path: str, skip_confirm: bool, verify_ssl: bool = True, env_name: str | None = None) -> int:
+    _, project_id, server_connection = build_semoss_context(verify_ssl=verify_ssl, env_name=env_name)
     normalized = normalize_remote_asset_path(remote_path)
 
     entry = get_remote_asset_entry(server_connection, project_id, normalized)
@@ -880,13 +955,14 @@ def bulk_upload_command(
     no_publish: bool,
     no_delete_existing: bool,
     verify_ssl: bool = True,
+    env_name: str | None = None,
 ) -> int:
     files = collect_files_from_paths(raw_paths)
     if not files:
         print("No files matched the provided paths.")
         return 0
 
-    _, project_id, server_connection = build_semoss_context(verify_ssl=verify_ssl)
+    _, project_id, server_connection = build_semoss_context(verify_ssl=verify_ssl, env_name=env_name)
     return bulk_upload_to_semoss(
         local_files=files,
         project_id=project_id,
@@ -896,8 +972,8 @@ def bulk_upload_command(
     )
 
 
-def publish_command(verify_ssl: bool = True) -> int:
-    _, project_id, server_connection = build_semoss_context(verify_ssl=verify_ssl)
+def publish_command(verify_ssl: bool = True, env_name: str | None = None) -> int:
+    _, project_id, server_connection = build_semoss_context(verify_ssl=verify_ssl, env_name=env_name)
     print(f"Publishing project {project_id}...")
     result = publish_project(server_connection, project_id)
     print(json.dumps(result, indent=2, default=str))
@@ -907,12 +983,13 @@ def publish_command(verify_ssl: bool = True) -> int:
 def main() -> int:
     args = parse_args()
     verify_ssl = not args.no_verify_ssl
+    env_name = args.env or None
 
     if args.command == "sync-from-remote":
-        return sync_semoss_folder_to_local(args.remote_folder, args.local_dir, args.overwrite, verify_ssl=verify_ssl)
+        return sync_semoss_folder_to_local(args.remote_folder, args.local_dir, args.overwrite, verify_ssl=verify_ssl, env_name=env_name)
 
     if args.command == "delete":
-        return delete_remote_assets(args.remote_path, args.yes, verify_ssl=verify_ssl)
+        return delete_remote_assets(args.remote_path, args.yes, verify_ssl=verify_ssl, env_name=env_name)
 
     if args.command == "bulk-upload":
         return bulk_upload_command(
@@ -920,12 +997,13 @@ def main() -> int:
             no_publish=args.no_publish,
             no_delete_existing=args.no_delete_existing,
             verify_ssl=verify_ssl,
+            env_name=env_name,
         )
 
     if args.command == "publish":
-        return publish_command(verify_ssl=verify_ssl)
+        return publish_command(verify_ssl=verify_ssl, env_name=env_name)
 
-    _, project_id, server_connection = build_semoss_context(verify_ssl=verify_ssl)
+    _, project_id, server_connection = build_semoss_context(verify_ssl=verify_ssl, env_name=env_name)
     local_file = Path(args.file).expanduser().resolve()
     return upload_local_file_to_semoss(
         local_file,

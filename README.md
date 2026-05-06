@@ -6,11 +6,11 @@ A template for building GovConnect.ai web applications with Claude Code. **Clone
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│  client/         React SPA (scaffolded by Claude Code)   │
+│  client/         React 18 SPA                            │
 ├──────────────────────────────────────────────────────────┤
-│  portals/        Build output (deployed to GovConnect.ai)       │
+│  portals/        Build output (deployed to GovConnect.ai)│
 ├──────────────────────────────────────────────────────────┤
-│  GovConnect.ai Platform  (remote host, DB, LLM, SDK)            │
+│  GovConnect.ai Platform  (remote host, DB, LLM, SDK)     │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -18,14 +18,10 @@ A template for building GovConnect.ai web applications with Claude Code. **Clone
 
 ## Quick Start
 
-```bash
-git clone <repo-url> my-semoss-app && cd my-semoss-app
-export GovConnect.ai_ACCESS_KEY="your-access-key"
-export GovConnect.ai_SECRET_KEY="your-secret-key"
-claude
-```
-
-Claude Code reads `.mcp.json` automatically and resolves `${env:GovConnect.ai_ACCESS_KEY}` at startup.
+1. Clone this repo and open it in Claude Code
+2. Add your GovConnect.ai access key and secret key to `.mcp.json` as `Authorization: Bearer <key>:<secret>`
+3. Restart Claude Code so the MCP servers pick up the credentials
+4. Ask Claude to build your app
 
 ## Prerequisites
 
@@ -34,7 +30,6 @@ Claude Code reads `.mcp.json` automatically and resolves `${env:GovConnect.ai_AC
 | Node.js | 20.19+ | [nodejs.org](https://nodejs.org) or `brew install node` |
 | pnpm | 10.x | `corepack enable && corepack prepare pnpm@latest --activate` |
 | Python | 3.10+ | Pre-installed on most systems |
-| GovConnect.ai SDK | latest | `pip install ai-server-sdk` |
 | Claude Code | latest | [claude.ai/code](https://claude.ai/code) |
 
 ## Directory Guide
@@ -42,42 +37,37 @@ Claude Code reads `.mcp.json` automatically and resolves `${env:GovConnect.ai_AC
 | Path | Purpose |
 |------|---------|
 | `CLAUDE.md` | Claude Code instructions — scaffolding, conventions, full React workflow |
-| `.mcp.json` | MCP config (3 GovConnect.ai servers, `${env:VAR}` credentials) |
+| `.mcp.json` | MCP config (3 GovConnect.ai servers, inline Bearer credentials) |
 | `semoss_config/config.json` | GovConnect.ai project metadata (project ID, module, database ID) |
 | `scripts/claude/` | Deploy script (`bulk-upload`, `delete`, `publish`) |
 | `docs/theme.md` | Hula-inspired color palette reference |
-| `client/` | React 19 SPA (scaffolded by Claude Code) |
+| `client/` | React 18 SPA |
 | `portals/` | Build output (gitignored) — deployed to GovConnect.ai |
-| `.env.example` | Environment variable template |
 
 ## Development
-
-Once the React app is scaffolded in `client/`:
 
 ```bash
 cd client
 pnpm install        # Install dependencies (pnpm only)
-pnpm run dev        # Dev server with HMR
-pnpm run build      # Type-check + build to ../portals/
-pnpm run check:fix  # Lint & format (Biome)
-pnpm run test:run   # Run tests
+pnpm dev        # Dev server with HMR
+pnpm build      # Type-check + build to portals/
+pnpm fix        # Lint & format (Biome)
+pnpm test:run   # Run tests
 ```
 
-Tech stack: React 19, TypeScript, Vite 8, Tailwind CSS v4, shadcn/ui (Base UI), TanStack Query v5, React Router v7, Biome.
+Tech stack: React 18, TypeScript, Vite 8, Tailwind CSS v4, shadcn/ui, TanStack Query v5, React Router v7, Biome.
 
 ## Deploy
 
 ```bash
-cd client && pnpm run build && cd ..
+cd client && pnpm build && cd ..
 python scripts/claude/semoss_asset_sync.py delete portals/assets --yes
 python scripts/claude/semoss_asset_sync.py bulk-upload portals
 ```
 
-See [scripts/README.md](scripts/README.md) for all commands, flags, and workflows.
-
 ## Credentials
 
-Set `GovConnect.ai_ACCESS_KEY` and `GovConnect.ai_SECRET_KEY` as environment variables. The `.mcp.json` file references them via `${env:VAR}` syntax — Claude Code resolves these at MCP server startup.
+Open `.mcp.json` and replace the placeholder `Authorization` header value with `Bearer <your-access-key>:<your-secret-key>`, then restart Claude Code. MCP servers only load credentials at startup.
 
 If MCP tools stop working, check that credentials are still valid and restart Claude Code.
 

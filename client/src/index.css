@@ -1,0 +1,132 @@
+/* Tailwind v4 — theme defined via CSS variables mapped in @theme inline.
+ * Colors follow the GovConnect.ai hula palette (docs/theme.md):
+ *   Primary: Lehua Teal (#1B8A8C) + Deep Lagoon (#0F5759) + Sea Glass (#7FBDBE)
+ *   Accent:  Marigold Lei (#F2A341) + Ember Orange (#C77518)
+ *   Neutral: Stage Night (#1A1F2B) / Woven Sand (#A89887) / Lauhala Cream (#F5EFE6)
+ *
+ * To add shadcn/ui components: pnpm dlx shadcn@latest add <component-name>
+ */
+
+@import "tailwindcss";
+
+@plugin "tailwindcss-animate";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+	--radius-sm: calc(var(--radius) - 4px);
+	--radius-md: calc(var(--radius) - 2px);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) + 4px);
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+	--color-chart-1: var(--chart-1);
+	--color-chart-2: var(--chart-2);
+	--color-chart-3: var(--chart-3);
+	--color-chart-4: var(--chart-4);
+	--color-chart-5: var(--chart-5);
+	--color-sidebar: var(--sidebar);
+	--color-sidebar-foreground: var(--sidebar-foreground);
+	--color-sidebar-primary: var(--sidebar-primary);
+	--color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+	--color-sidebar-accent: var(--sidebar-accent);
+	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+	--color-sidebar-border: var(--sidebar-border);
+	--color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+	--radius: 0.5rem;
+	/* Hula palette — light mode */
+	--background: #f5efe6; /* Lauhala Cream */
+	--foreground: #1a1f2b; /* Stage Night */
+	--card: #ffffff; /* Pure White */
+	--card-foreground: #1a1f2b;
+	--popover: #ffffff;
+	--popover-foreground: #1a1f2b;
+	--primary: #1b8a8c; /* Lehua Teal */
+	--primary-foreground: #f5efe6;
+	--secondary: #7fbdbe; /* Sea Glass */
+	--secondary-foreground: #0f5759; /* Deep Lagoon */
+	--muted: #a89887; /* Woven Sand */
+	--muted-foreground: #0f5759;
+	--accent: #f2a341; /* Marigold Lei */
+	--accent-foreground: #1a1f2b;
+	--destructive: #c44536; /* Error coral-red */
+	--border: #a89887;
+	--input: #a89887;
+	--ring: #1b8a8c;
+	--chart-1: #1b8a8c;
+	--chart-2: #f2a341;
+	--chart-3: #4a9d7c;
+	--chart-4: #5ba3b0;
+	--chart-5: #c77518;
+	--sidebar: #f5efe6;
+	--sidebar-foreground: #1a1f2b;
+	--sidebar-primary: #1b8a8c;
+	--sidebar-primary-foreground: #f5efe6;
+	--sidebar-accent: #f2a341;
+	--sidebar-accent-foreground: #1a1f2b;
+	--sidebar-border: #a89887;
+	--sidebar-ring: #1b8a8c;
+}
+
+.dark {
+	/* Hula palette — dark mode */
+	--background: #1a1f2b; /* Stage Night */
+	--foreground: #f5efe6; /* Lauhala Cream */
+	--card: #0f5759; /* Deep Lagoon */
+	--card-foreground: #f5efe6;
+	--popover: #0f5759;
+	--popover-foreground: #f5efe6;
+	--primary: #7fbdbe; /* Sea Glass */
+	--primary-foreground: #1a1f2b;
+	--secondary: #0f5759;
+	--secondary-foreground: #f5efe6;
+	--muted: #0f5759;
+	--muted-foreground: #7fbdbe;
+	--accent: #c77518; /* Ember Orange */
+	--accent-foreground: #f5efe6;
+	--destructive: #c44536;
+	--border: #0f5759;
+	--input: #0f5759;
+	--ring: #7fbdbe;
+	--chart-1: #7fbdbe;
+	--chart-2: #f2a341;
+	--chart-3: #4a9d7c;
+	--chart-4: #5ba3b0;
+	--chart-5: #c77518;
+	--sidebar: #0f5759;
+	--sidebar-foreground: #f5efe6;
+	--sidebar-primary: #7fbdbe;
+	--sidebar-primary-foreground: #1a1f2b;
+	--sidebar-accent: #c77518;
+	--sidebar-accent-foreground: #f5efe6;
+	--sidebar-border: #0f5759;
+	--sidebar-ring: #7fbdbe;
+}
+
+@layer base {
+	* {
+		@apply border-border outline-ring/50;
+	}
+	body {
+		@apply bg-background text-foreground;
+	}
+}

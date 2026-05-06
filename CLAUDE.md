@@ -8,20 +8,23 @@ GovConnect.ai, GovConnect, GCAI, and Semoss all refer to the same platform. User
 
 ## Key Files
 
-- `semoss_config/config.json` — GovConnect.ai project metadata (`project_id`, `app_id`, `base_url`, etc.)
-- `.mcp.json` — MCP credentials (gitignored, inline Bearer tokens)
+- `semoss_config/environments.json` — named environments: endpoints, project IDs, app IDs (committed, no secrets)
+- `semoss_config/credentials.env` — per-environment access/secret keys (gitignored, never commit)
+- `.mcp.json` — MCP server connections for the active session (gitignored, inline Bearer tokens)
 - `client/` — React app source (pnpm, Vite, TypeScript, Tailwind v4)
-- `client/vite.config.ts` — must have `base: './'` and `outDir: '../portals'`
+- `client/vite.config.ts` — must have `base: './'` and `outDir: '../../portals'`
 - `portals/` — build output (gitignored), uploaded to GovConnect.ai
 - `scripts/claude/semoss_asset_sync.py` — deploy script
 - `docs/theme.md` — color palette reference
 
 ## Startup Checklist
 
-1. **Credentials** — check `.mcp.json` for placeholder values. If found, ask the user for their GovConnect.ai access key and secret key, write them as `Authorization:Bearer <key>:<secret>`, then tell the user to restart Claude Code (MCP servers only load at startup).
-2. **Project config** — read `semoss_config/config.json`. If `project_id` is empty, offer to create a new project via MCP.
-3. **MCP connectivity** — try a GovConnect.ai MCP tool. If it fails, credentials are likely wrong.
-4. **Client dir** — if `client/` doesn't exist, offer to scaffold. If it exists but `node_modules/` is missing, run `cd client && pnpm install`.
+When the user wants to build or deploy a GovConnect.ai app, run these steps before proceeding. If MCP connectivity isn't available, note it and continue — not every user has platform access.
+
+1. **Credentials** — check `.mcp.json` for placeholder values. If found, ask the user for their GovConnect.ai access key and secret key, write them as `Authorization:Bearer <key>:<secret>`, then tell the user to restart Claude Code and **stop here** — MCP servers only load at startup, so nothing that requires platform access will work until they restart and you confirm connectivity in step 3.
+2. **Project config** — read `semoss_config/environments.json`. If it has no envs configured, offer to set one up. Check that `semoss_config/credentials.env` exists — if not, ask the user for their keys and create it from `semoss_config/credentials.env.example`.
+3. **MCP connectivity** — call `get_agent_platform_instructions` to verify the MCP servers are reachable. If it fails, credentials in `.mcp.json` are likely wrong. Don't block on this — continue if the user doesn't have access.
+4. **Client dir** — if `node_modules/` is missing from `client/`, run `cd client && pnpm install`.
 
 ## GovConnect.ai Instance Config
 
@@ -33,13 +36,20 @@ Set `base_url` to your instance's hostname. For `api_module_url` and `web_module
 | `https://host.com/prod/SemossWeb/...` | `https://host.com/` | `/prod/Monolith` | `/prod/SemossWeb` |
 | `https://host.com/demo/SemossWeb/...` | `https://host.com/` | `/demo/Monolith` | `/demo/SemossWeb` |
 
-Update both `semoss_config/config.json` and `.mcp.json` when setting these.
+Update `semoss_config/environments.json` (for the relevant env entry) and `.mcp.json` (for the active MCP session) when configuring a new instance.
 
 ## Tech Stack (for scaffolding)
 
-React 19, TypeScript strict, Vite 6+, Tailwind CSS v4 (via `@tailwindcss/vite`, not PostCSS), shadcn/ui (Base UI, `--base base`), TanStack Query v5, React Router v7, Vitest, pnpm 10.
+React 18, TypeScript strict, Vite 8, Tailwind CSS v4 (via `@tailwindcss/vite`, not PostCSS), shadcn/ui (Base UI, `--base base`), TanStack Query v5, React Router v7, Vitest, Biome, pnpm 10.
 
 **Never use npm or yarn — pnpm only.**
+
+## Backend Options
+
+The platform supports two backend approaches. Python (`py/mcp_driver.py`) is the default for most apps, but **Java reactors are fully supported** — use them when the user prefers Java, when performance matters, or when the logic fits better in a compiled reactor. Don't steer users away from Java.
+
+- **Python** — logic in `py/mcp_driver.py`, called via `actions.runPy(...)` or exposed as MCP tools via `mcp/py_mcp.json`
+- **Java** — extend `AbstractReactor`, called from the FE via `actions.run('ReactorName(param=["value"])')`
 
 ## GovConnect.ai Platform Concepts
 
@@ -62,188 +72,102 @@ Always use `createHashRouter` — GovConnect.ai embeds apps in iframes that don'
 ### Vite Config Requirements
 
 ```typescript
-base: './',           // REQUIRED — relative paths for iframe embedding
-outDir: '../portals', // build output goes here
+base: './',             // REQUIRED — relative paths for iframe embedding
+outDir: '../../portals', // build output goes here (relative to src/ root)
 ```
 
 ### Runtime Config
 
-Don't bake project IDs, model IDs, or module paths into the JS bundle. Fetch `config.json` at runtime from `client/public/config.json` (Vite copies it to `portals/`). `semoss_config/config.json` uses snake_case; `client/public/config.json` uses camelCase.
+`vite.config.ts` statically bakes three env vars into the JS bundle at build time via `define`:
+
+| `.env.local` var | Source in `environments.json` | Notes |
+|---|---|---|
+| `APP` | `envs.<name>.app_id` | Required — empty string if unset breaks pixel calls |
+| `MODULE` | `envs.<name>.api_module_url` | e.g. `/Monolith` or `/prod/Monolith` |
+| `ENDPOINT` | `envs.<name>.base_url` | e.g. `https://your-instance.example.com/` |
+
+Before any build, write `client/.env.local` with the target environment's values. `client/.env` has `ENDPOINT` and `MODULE` committed as defaults; `APP` is intentionally left commented out.
 
 ### Database Schemas
 
 Schemas from `get_schema()` are Base64-encoded — decode before use. Write decoded schema to `semoss_config/` for reference.
 
-### Pixel calls from the FE (CSRF + SetContext)
-
-Any FE code that POSTs to `/Monolith/api/...` (i.e. anything that calls a reactor) must satisfy two contracts, regardless of how the FE is structured (`client/`-built, hand-edited `portals/`, a separate SDK package, etc.):
-
-**1. CSRF handshake.** SEMOSS runs Tomcat's `RestCsrfPreventionFilter`. State-changing requests are rejected with `403 CSRF nonce validation failed` unless they carry a current nonce. The handshake:
-
-   1. Send a GET to any SEMOSS API endpoint with header `X-CSRF-TOKEN: Fetch`. Tomcat stores a nonce on the session and echoes it back in the response's `X-CSRF-TOKEN` header. The endpoint URL doesn't matter — anything that flows through the CSRF filter works. The reference implementation reuses the `/api/engine/runPixel` URL because every SEMOSS instance has it; the GET doesn't execute any pixel and any 4xx body is fine since we only need the response header.
-   2. Cache the response header value for the page lifetime.
-   3. Every subsequent POST/PUT/DELETE includes that value as `X-CSRF-TOKEN: <nonce>` plus `credentials: 'include'` so the JSESSIONID cookie tags along.
-
-**2. `SetContext("<projectId>")` before any project-scoped reactor.** Without it, calls like `HelloWorld()` resolve only against platform reactors and your custom reactor will fail with "unknown reactor." Run `SetContext` once on first pixel call, reading `projectId` from your runtime config.
-
-The most common cause of a freshly-deployed app showing CSRF 403 *or* "unknown reactor" is hand-rolled `fetch` that omits one of these steps.
-
-**Reference implementation** (drop into your FE wherever you keep API helpers — e.g. `client/src/lib/pixel.ts` for the default template, or anywhere else for alternative layouts):
-
-```ts
-interface AppConfig { baseUrl: string; apiModuleUrl: string; projectId?: string; }
-
-let _config: AppConfig | null = null;
-let _csrfToken: string | null = null;
-let _csrfFetchPromise: Promise<string> | null = null;
-let _contextSet = false;
-
-async function getConfig(): Promise<AppConfig> {
-  if (_config) return _config;
-  const res = await fetch('./config.json');
-  if (!res.ok) throw new Error('Failed to load config.json');
-  _config = await res.json();
-  return _config!;
-}
-
-async function fetchCsrfToken(): Promise<string> {
-  if (_csrfToken) return _csrfToken;
-  if (_csrfFetchPromise) return _csrfFetchPromise;
-  _csrfFetchPromise = (async () => {
-    const { baseUrl, apiModuleUrl } = await getConfig();
-    // Any URL through the CSRF filter works; runPixel is universal.
-    const url = `${baseUrl.replace(/\/$/, '')}${apiModuleUrl}/api/engine/runPixel`;
-    const res = await fetch(url, {
-      method: 'GET',
-      credentials: 'include',
-      headers: { 'X-CSRF-TOKEN': 'Fetch' },
-    });
-    const token = res.headers.get('X-CSRF-TOKEN');
-    if (!token) throw new Error('CSRF handshake failed — server did not return X-CSRF-TOKEN.');
-    _csrfToken = token;
-    return token;
-  })();
-  try { return await _csrfFetchPromise; } finally { _csrfFetchPromise = null; }
-}
-
-async function rawRunPixel(expression: string): Promise<unknown> {
-  const { baseUrl, apiModuleUrl } = await getConfig();
-  const csrfToken = await fetchCsrfToken();
-  const url = `${baseUrl.replace(/\/$/, '')}${apiModuleUrl}/api/engine/runPixel`;
-  const res = await fetch(url, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
-    body: JSON.stringify({ insight: 'new', expression }),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-  const json = await res.json();
-  const pixelReturn = json?.pixelReturn?.[0];
-  if (pixelReturn?.operationType?.includes('ERROR')) {
-    throw new Error(pixelReturn?.output ?? 'Pixel error');
-  }
-  return pixelReturn?.output ?? json;
-}
-
-async function ensureProjectContext(): Promise<void> {
-  if (_contextSet) return;
-  const { projectId } = await getConfig();
-  if (!projectId) { _contextSet = true; return; }
-  await rawRunPixel(`SetContext("${projectId}");`);
-  _contextSet = true;
-}
-
-export async function runPixel(expression: string): Promise<unknown> {
-  await ensureProjectContext();
-  return rawRunPixel(expression);
-}
-```
-
-## Shell Environment
-
-`node`, `pnpm`, and `ai-repo` are **not** in the default Bash PATH. NVM manages node/pnpm; `ai-repo` lives in pnpm's global bin. The Bash tool runs commands in a fresh non-interactive shell, so `~/.zshrc` is **not** loaded — you have to set everything up explicitly each time.
-
-**Use this exact prefix on every shell command** that needs node/pnpm/ai-repo (build, publish, ai-repo CLI, anything calling pnpm):
-
-```bash
-export NVM_DIR="$HOME/.nvm" && source "$NVM_DIR/nvm.sh" && export PATH="$HOME/Library/pnpm:$PATH"
-```
-
-Common gotchas (don't repeat them):
-- `source ~/.nvm/nvm.sh` **alone** does not work — `NVM_DIR` must be set first or nvm fails to locate the installed node versions.
-- Don't try `nvm use <version>` — it errors because the version "isn't installed" in the subprocess context. The plain `source` line above auto-selects the active node.
-- The launcher at `~/Library/pnpm/ai-repo` is a shell script that itself needs node on PATH. Sourcing NVM is required even just to invoke `ai-repo`.
-
-Then commands are straightforward, e.g.:
-```bash
-export NVM_DIR="$HOME/.nvm" && source "$NVM_DIR/nvm.sh" && export PATH="$HOME/Library/pnpm:$PATH" && \
-  ai-repo publish --app <app_id> --notes "..."
-```
-
 ## Build & Deploy
+
+There are two deployment methods:
+
+| Method | What it does | When to use |
+|---|---|---|
+| **Deploy script** (`semoss_asset_sync.py`) | Directly uploads assets to a running instance | Dev, preprod, or any env you have direct credentials for |
+| **ai-repo** (`ai-repo publish`) | Submits a zip into a review/approval pipeline | When going through a formal review process |
+
+Both methods can target any environment — the distinction is governance, not environment.
+
+### Before any build — write `client/.env.local`
+
+Write the target environment's values to `client/.env.local`:
+```
+APP=<envs.<name>.app_id>
+ENDPOINT=<envs.<name>.base_url>
+MODULE=<envs.<name>.api_module_url>
+```
 
 ### Build
 ```bash
-source ~/.nvm/nvm.sh && cd client && pnpm build
+cd client && pnpm build
 ```
 
 ### Live deploy (sync script)
+
+The `--env` flag tells the script which entry to read from `semoss_config/environments.json` and `semoss_config/credentials.env`.
+
 ```bash
 cd client && pnpm build && cd ..
-python scripts/claude/semoss_asset_sync.py delete portals/assets --yes
-python scripts/claude/semoss_asset_sync.py bulk-upload portals
+python scripts/claude/semoss_asset_sync.py --env <name> delete portals/assets --yes
+python scripts/claude/semoss_asset_sync.py --env <name> bulk-upload portals
 ```
 
-**First deploy only:** skip the `delete` step — the remote path doesn't exist yet.
-
-**Self-signed SSL certificates (preprod):** Add `--no-verify-ssl` flag:
+**First deploy only:** skip the `delete` step — the remote path doesn't exist yet:
 ```bash
-python scripts/claude/semoss_asset_sync.py bulk-upload portals --no-verify-ssl
+python scripts/claude/semoss_asset_sync.py --env <name> bulk-upload portals
 ```
 
-The sync script handles backup, upload, and publish. Don't try to replicate it with MCP tools directly.
+**Self-signed SSL certificates (preprod):**
+```bash
+python scripts/claude/semoss_asset_sync.py --env <name> --no-verify-ssl bulk-upload portals
+```
 
 ### Submit for review (ai-repo)
 
 `ai-repo` submits a zip into an approval pipeline — it does **not** publish the app to users. After approval, an admin deploys server-side via `RepositoryDeployApp`, which auto-creates the SEMOSS project on the target instance.
 
-**Important: the ai-repo `app_id` IS the SEMOSS `project_id` at deploy time.** When building for ai-repo submission, the runtime config (`client/public/config.json` → `projectId`) must reference the ai-repo `app_id`, not a separately-created vibe project. The deploy reactor synthesizes the `.smss` with `PROJECT={app_id}`, so any embedded refs (FE routes, asset paths, MCP project args) need to match.
+**Important: the ai-repo `app_id` IS the SEMOSS `project_id` at deploy time.** When building for ai-repo submission, `APP` in `client/.env.local` must be set to the `app_id` for the target environment — not a separately-created project ID. The deploy reactor synthesizes the `.smss` with `PROJECT={app_id}`, so any embedded refs need to match.
 
 ```bash
-# First time: register the app
+# First time: register the app on the target environment
+ai-repo login --base-url <base_url>/Monolith --access-key <key> --secret-key <key>
 ai-repo create-app --name "<name>" --business-unit "<team>" --description "<desc>"
-# Save returned app_id to semoss_config/config.json — this is also the SEMOSS
-# project_id the deployed assets will live under post-approval. Set
-# client/public/config.json's projectId to this value before building.
+# Save the returned app_id to environments.json under envs.<name>.app_id
 
-# Submit a version — run from the project root.
-# The CLI handles build + staging + zipping. It detects client/package.json
-# with a build script and runs the FE build (pnpm/yarn/npm chosen by lockfile),
-# then stages the project folders (portals/, client/, java/, py/, mcp/,
-# semoss_config/, ...) into a submission zip and uploads. There is no
-# assets/ wrapper to construct manually.
-#
-# Excluded automatically: node_modules/, .git/, dist/, build/, target/,
-# pom.xml, .env, OS junk.
+# Build targeting the submission environment, then submit
+cd client && pnpm build && cd ..
 ai-repo publish --app <app_id> --notes "<notes>"
-
-# Skip the build step when portals/ is already current:
-# ai-repo publish --app <app_id> --skip-build --notes "<notes>"
 
 # Check status
 ai-repo status --app <app_id>
 ```
 
+`publish` runs from the project root and handles zipping automatically. It includes `client`, `java`, `portals`, `py`, and `mcp` by default. Use `--include <dirs>` for extra paths or `--dry-run` to preview contents without uploading.
+
+**`ai-repo` not found?** It lives in pnpm's bin directory. Prefix the failing command with `PATH="$HOME/Library/pnpm:$PATH"` to fix it.
+
 After all reviews pass (Initial → Security → Final, all approved), an admin runs the deploy reactor directly via Pixel:
 ```
 RepositoryDeployApp(appId="<app_id>", versionId="<version_id>")
 ```
-This is end-to-end — synthesizes the `.smss`, registers the project, flips the version to live, and publishes the portal to end users (no manual `PublishProject` follow-up needed). On first deploy, SEMOSS grants OWNER access to the deployer and READ_ONLY access to the version's submitter. The CLI doesn't expose this step.
+On first deploy, SEMOSS auto-registers the project under `app_id` and grants OWNER access to the deployer + READ_ONLY access to the version's submitter.
 
-`ai-repo` is usually already logged in. Only run `ai-repo login` if you get an auth error:
-```bash
-ai-repo login --base-url <base_url>/Monolith --access-key <key> --secret-key <key>
-```
+`ai-repo` is usually already logged in. Only run `ai-repo login` if you get an auth error. Credentials come from `semoss_config/credentials.env`.
 
 **Self-signed SSL certificates (preprod):** Prefix `ai-repo` commands with `NODE_TLS_REJECT_UNAUTHORIZED=0`:
 ```bash
@@ -251,22 +175,61 @@ NODE_TLS_REJECT_UNAUTHORIZED=0 ai-repo create-app --name "..." --business-unit "
 NODE_TLS_REJECT_UNAUTHORIZED=0 ai-repo publish --app <app_id> --notes "..."
 ```
 
-## semoss_config/config.json Shape
+## Multi-Environment Workflow
+
+The agent handles all environment switching. Users just name the target.
+
+### "Deploy the app to `<env>`"
+1. Read `semoss_config/environments.json` → `envs.<env>`: `base_url`, `api_module_url`, `project_id`
+2. Write `client/.env.local`: `APP=<project_id>`, `ENDPOINT=<base_url>`, `MODULE=<api_module_url>`
+3. `cd client && pnpm build && cd ..`
+4. `python scripts/claude/semoss_asset_sync.py --env <env> delete portals/assets --yes`
+5. `python scripts/claude/semoss_asset_sync.py --env <env> bulk-upload portals`
+
+### "Submit for review on `<env>`"
+1. Read `semoss_config/environments.json` → `envs.<env>`: `base_url`, `api_module_url`, `app_id`
+2. Read `semoss_config/credentials.env` → `<ENV>_ACCESS_KEY`, `<ENV>_SECRET_KEY`
+3. Write `client/.env.local`: `APP=<app_id>`, `ENDPOINT=<base_url>`, `MODULE=<api_module_url>`
+4. `cd client && pnpm build && cd ..`
+5. `ai-repo login --base-url <base_url>/Monolith --access-key <key> --secret-key <key>`
+6. `ai-repo publish --app <app_id> --notes "<notes>"`
+
+## semoss_config/environments.json Shape
 
 ```json
 {
-  "project_id": "",
-  "app_id": "",
-  "module": "/Monolith",
-  "base_url": "https://your-instance.example.com/",
-  "web_module_url": "/SemossWeb",
   "model_id": "",
   "database_id": "",
-  "created_on": "",
-  "ai_repo_base_url": "",
-  "is_mcp": false
+  "envs": {
+    "dev": {
+      "label": "Development",
+      "base_url": "https://your-instance.example.com/",
+      "api_module_url": "/Monolith",
+      "web_module_url": "/SemossWeb",
+      "project_id": "",
+      "app_id": ""
+    }
+  }
 }
 ```
+
+`project_id` — used by the deploy script for direct asset uploads. Set when creating a project via MCP.
+`app_id` — used by `ai-repo` for the review pipeline. Set after running `ai-repo create-app`. On the same endpoint, `app_id` and `project_id` are different IDs that may or may not refer to the same logical app.
+
+Add more envs by adding entries under `envs` — name them anything (`dev`, `preprod`, `prod`, `workshop`, etc.).
+
+## semoss_config/credentials.env Shape
+
+```
+# Prefix matches the env name in environments.json, uppercased.
+DEV_ACCESS_KEY=
+DEV_SECRET_KEY=
+
+PROD_ACCESS_KEY=
+PROD_SECRET_KEY=
+```
+
+Copy from `semoss_config/credentials.env.example`. Gitignored — never commit.
 
 ## MCP Servers
 
@@ -280,7 +243,7 @@ NODE_TLS_REJECT_UNAUTHORIZED=0 ai-repo publish --app <app_id> --notes "..."
 
 - **`create_project` always reports an error string** — even on success, the tool returns `"Could not determine project_id"`. The real project data (including `project_id`) is embedded in that message; parse it rather than treating it as a failure.
 - **Project names must be unique** — `create_project` returns a hard error if the name already exists on the platform. Pick a unique name or check first.
-- **Update `config.json` before running the sync script** — `semoss_asset_sync.py bulk-upload` reads `project_id` from `semoss_config/config.json`. When creating a new project, update that file with the new `project_id` before uploading, or files will go to the wrong project.
+- **Update `environments.json` before running the sync script** — `semoss_asset_sync.py` reads `project_id` from the target env's entry. When creating a new project, save the new `project_id` into `environments.json` before running the deploy, or files will go to the wrong project.
 
 ## URL Patterns
 
