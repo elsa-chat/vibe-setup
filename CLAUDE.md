@@ -86,7 +86,7 @@ outDir: '../../portals', // build output goes here (relative to src/ root)
 | `MODULE` | `envs.<name>.api_module_url` | e.g. `/Monolith` or `/prod/Monolith` |
 | `ENDPOINT` | `envs.<name>.base_url` | e.g. `https://your-instance.example.com/` |
 
-Before any build, write `client/.env.local` with the target environment's values. `client/.env` has `ENDPOINT` and `MODULE` committed as defaults; `APP` is intentionally left commented out.
+Before any build, write `client/.env.local` with the target environment's values. `client/.env` is committed as a placeholder with dummy defaults — never edit it. `client/.env.local` overrides it and is gitignored; the agent writes it before every build.
 
 ### Database Schemas
 

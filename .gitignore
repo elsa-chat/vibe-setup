@@ -15,11 +15,7 @@ node_modules/
 portals/
 
 # Environment files (credentials — never commit)
-.env
-.env.local
-.env.dev
-.env.prod
-.env.*.local
+*.local
 
 # Per-environment GovConnect.ai credentials
 semoss_config/credentials.env
