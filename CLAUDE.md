@@ -19,12 +19,14 @@ GovConnect.ai, GovConnect, GCAI, and Semoss all refer to the same platform. User
 
 ## Startup Checklist
 
-When the user wants to build or deploy a GovConnect.ai app, run these steps before proceeding. If MCP connectivity isn't available, note it and continue — not every user has platform access.
+When the user wants to build or deploy a GovConnect.ai app, run these steps before proceeding. Getting platform instructions via MCP should happen before any app work — they provide up-to-date guidance that affects how you build. Always attempt this before starting.
 
 1. **Credentials** — check `.mcp.json` for placeholder values. If found, ask the user for their GovConnect.ai access key and secret key, write them as `Authorization:Bearer <key>:<secret>`, then tell the user to restart Claude Code and **stop here** — MCP servers only load at startup, so nothing that requires platform access will work until they restart and you confirm connectivity in step 3.
 2. **Project config** — read `semoss_config/environments.json`. If it has no envs configured, offer to set one up. Check that `semoss_config/credentials.env` exists — if not, ask the user for their keys and create it from `semoss_config/credentials.env.example`.
-3. **MCP connectivity** — call `get_agent_platform_instructions` to verify the MCP servers are reachable. If it fails, credentials in `.mcp.json` are likely wrong. Don't block on this — continue if the user doesn't have access.
+3. **MCP connectivity** — call `get_agent_platform_instructions` to verify the MCP servers are reachable. If it fails, ask the user whether they have platform access before continuing — the instructions it returns should inform your work. Only proceed without it if the user confirms they don't have access.
 4. **Client dir** — if `node_modules/` is missing from `client/`, run `cd client && pnpm install`.
+
+**Do not create databases, projects, or other platform resources unless the user explicitly asks.** The typical workflow is: build the app locally, then submit via `ai-repo`. Resource creation is a deliberate step, not a default.
 
 ## GovConnect.ai Instance Config
 
@@ -141,7 +143,7 @@ python scripts/claude/semoss_asset_sync.py --env <name> --no-verify-ssl bulk-upl
 
 `ai-repo` submits a zip into an approval pipeline — it does **not** publish the app to users. After approval, an admin deploys server-side via `RepositoryDeployApp`, which auto-creates the SEMOSS project on the target instance.
 
-**Important: the ai-repo `app_id` IS the SEMOSS `project_id` at deploy time.** When building for ai-repo submission, `APP` in `client/.env.local` must be set to the `app_id` for the target environment — not a separately-created project ID. The deploy reactor synthesizes the `.smss` with `PROJECT={app_id}`, so any embedded refs need to match.
+**Important:** `APP` in `client/.env.local` must be set to the `app_id` for the target environment before building. The deploy reactor synthesizes the `.smss` with `PROJECT={app_id}`, so any embedded refs need to match.
 
 ```bash
 # First time: register the app on the target environment
@@ -180,8 +182,8 @@ NODE_TLS_REJECT_UNAUTHORIZED=0 ai-repo publish --app <app_id> --notes "..."
 The agent handles all environment switching. Users just name the target.
 
 ### "Deploy the app to `<env>`"
-1. Read `semoss_config/environments.json` → `envs.<env>`: `base_url`, `api_module_url`, `project_id`
-2. Write `client/.env.local`: `APP=<project_id>`, `ENDPOINT=<base_url>`, `MODULE=<api_module_url>`
+1. Read `semoss_config/environments.json` → `envs.<env>`: `base_url`, `api_module_url`, `app_id`
+2. Write `client/.env.local`: `APP=<app_id>`, `ENDPOINT=<base_url>`, `MODULE=<api_module_url>`
 3. `cd client && pnpm build && cd ..`
 4. `python scripts/claude/semoss_asset_sync.py --env <env> delete portals/assets --yes`
 5. `python scripts/claude/semoss_asset_sync.py --env <env> bulk-upload portals`
@@ -206,15 +208,15 @@ The agent handles all environment switching. Users just name the target.
       "base_url": "https://your-instance.example.com/",
       "api_module_url": "/Monolith",
       "web_module_url": "/SemossWeb",
-      "project_id": "",
       "app_id": ""
     }
   }
 }
 ```
 
-`project_id` — used by the deploy script for direct asset uploads. Set when creating a project via MCP.
-`app_id` — used by `ai-repo` for the review pipeline. Set after running `ai-repo create-app`. On the same endpoint, `app_id` and `project_id` are different IDs that may or may not refer to the same logical app.
+`app_id` — the identifier for the app/project on this environment. Set after running `ai-repo create-app`. Different environments will have different `app_id` values for the same logical app.
+
+**Note:** "app" and "project" are synonyms on the GovConnect.ai platform. The CLI, backend, and deploy script use both terms interchangeably — they refer to the same thing. `app_id` is the canonical field name here.
 
 Add more envs by adding entries under `envs` — name them anything (`dev`, `preprod`, `prod`, `workshop`, etc.).
 
@@ -241,17 +243,17 @@ Copy from `semoss_config/credentials.env.example`. Gitignored — never commit.
 
 ### MCP Quirks
 
-- **`create_project` always reports an error string** — even on success, the tool returns `"Could not determine project_id"`. The real project data (including `project_id`) is embedded in that message; parse it rather than treating it as a failure.
+- **`create_project` always reports an error string** — even on success, the tool returns `"Could not determine project_id"`. The real project data (including the app/project ID) is embedded in that message; parse it rather than treating it as a failure.
 - **Project names must be unique** — `create_project` returns a hard error if the name already exists on the platform. Pick a unique name or check first.
-- **Update `environments.json` before running the sync script** — `semoss_asset_sync.py` reads `project_id` from the target env's entry. When creating a new project, save the new `project_id` into `environments.json` before running the deploy, or files will go to the wrong project.
+- **Update `environments.json` before running the sync script** — `semoss_asset_sync.py` reads `app_id` from the target env's entry. When creating a new project, save the new `app_id` into `environments.json` before running the deploy, or files will go to the wrong project.
 
 ## URL Patterns
 
 | Purpose | Pattern |
 |---------|---------|
-| App view | `<base_url><web_module_url>/packages/client/dist/#/app/<project_id>/view` |
+| App view | `<base_url><web_module_url>/packages/client/dist/#/app/<app_id>/view` |
 | Database | `<base_url><web_module_url>/packages/client/dist/#/engine/database/<database_id>` |
 
 ## Tagging
 
-After publishing, tag via MCP: `attach_tag(project_id, tag)`. Common tags: `approval-pending`, `approved`, `draft`, `deprecated`. Confirm with the user before applying.
+After publishing, tag via MCP: `attach_tag(app_id, tag)`. Common tags: `approval-pending`, `approved`, `draft`, `deprecated`. Confirm with the user before applying.

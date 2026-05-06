@@ -8,7 +8,7 @@ You manage the ai-repo approval pipeline for this project.
 
 ## Setup
 
-1. Read `semoss_config/environments.json` to get the target env's `app_id`, `base_url`, `api_module_url`, and `project_id`.
+1. Read `semoss_config/environments.json` to get the target env's `app_id`, `base_url`, and `api_module_url`.
 2. Read `semoss_config/credentials.env` for `<ENV>_ACCESS_KEY` and `<ENV>_SECRET_KEY`.
 3. Run `ai-repo --help` to confirm it's installed and learn the current CLI syntax.
 

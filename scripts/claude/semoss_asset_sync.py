@@ -158,8 +158,7 @@ def load_env_config(env_name: str) -> dict[str, str]:
         )
     env = envs[env_name]
     return {
-        "project_id": str(env.get("project_id") or ""),
-        "app_id": str(env.get("app_id") or ""),
+        "app_id": str(env.get("app_id") or env.get("project_id") or ""),
         "base_url": str(env.get("base_url") or DEFAULT_HOST),
         "api_module_url": str(env.get("api_module_url") or DEFAULT_API_MODULE_URL),
         "web_module_url": str(env.get("web_module_url") or DEFAULT_WEB_MODULE_URL),
@@ -789,10 +788,10 @@ def build_semoss_context(verify_ssl: bool = True, env_name: str | None = None) -
         semoss_config = load_semoss_config(SEMOSS_CONFIG_PATH)
         access_token, secret = load_bearer_parts(CLAUDE_MCP_CONFIG_PATH, COPILOT_MCP_CONFIG_PATH)
 
-    project_id = semoss_config.get("project_id")
+    project_id = semoss_config.get("app_id") or semoss_config.get("project_id")
     if not project_id:
         config_hint = f"semoss_config/environments.json (env: {env_name})" if env_name else "semoss_config/config.json"
-        raise SystemExit(f"project_id is not set in {config_hint}.")
+        raise SystemExit(f"app_id is not set in {config_hint}.")
 
     server_connection = build_server_connection(
         endpoint=build_api_endpoint(semoss_config),
