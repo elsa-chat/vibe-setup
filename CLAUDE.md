@@ -155,13 +155,13 @@ ai-repo create-app --name "<name>" --business-unit "<team>" --description "<desc
 
 # Build targeting the submission environment, then submit
 cd client && pnpm build && cd ..
-zip -r portals.zip portals/
-ai-repo publish portals.zip --app <app_id> --notes "<notes>"
-rm portals.zip
+ai-repo publish --app <app_id> --notes "<notes>"
 
 # Check status
 ai-repo status --app <app_id>
 ```
+
+`publish` runs from the project root and handles zipping automatically. It includes `client`, `java`, `portals`, `py`, and `mcp` by default. Use `--include <dirs>` for extra paths or `--dry-run` to preview contents without uploading.
 
 **`ai-repo` not found?** It lives in pnpm's bin directory. Prefix the failing command with `PATH="$HOME/Library/pnpm:$PATH"` to fix it.
 
@@ -176,7 +176,7 @@ On first deploy, SEMOSS auto-registers the project under `app_id` and grants OWN
 **Self-signed SSL certificates (preprod):** Prefix `ai-repo` commands with `NODE_TLS_REJECT_UNAUTHORIZED=0`:
 ```bash
 NODE_TLS_REJECT_UNAUTHORIZED=0 ai-repo create-app --name "..." --business-unit "..." --description "..."
-NODE_TLS_REJECT_UNAUTHORIZED=0 ai-repo publish portals.zip --app <app_id> --notes "..."
+NODE_TLS_REJECT_UNAUTHORIZED=0 ai-repo publish --app <app_id> --notes "..."
 ```
 
 ## Multi-Environment Workflow
@@ -198,7 +198,7 @@ The agent handles all environment switching. Users just name the target.
 4. Update `client/public/config.json` with `projectId=<app_id>` and the env's other values
 5. `cd client && pnpm build && cd ..`
 6. `ai-repo login --base-url <base_url>/Monolith --access-key <key> --secret-key <key>`
-7. `zip -r portals.zip portals/ && ai-repo publish portals.zip --app <app_id> --notes "<notes>" && rm portals.zip`
+7. `ai-repo publish --app <app_id> --notes "<notes>"`
 
 ## semoss_config/environments.json Shape
 
