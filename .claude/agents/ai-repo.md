@@ -8,22 +8,22 @@ You manage the ai-repo approval pipeline for this project.
 
 ## Setup
 
-1. Read `semoss_config/config.json` to get `app_id`, `base_url`, and `project_id`.
-2. Run `ai-repo --help` to confirm it's installed and learn the current CLI syntax.
+1. Read `semoss_config/environments.json` to get the target env's `app_id`, `base_url`, `api_module_url`, and `project_id`.
+2. Read `semoss_config/credentials.env` for `<ENV>_ACCESS_KEY` and `<ENV>_SECRET_KEY`.
+3. Run `ai-repo --help` to confirm it's installed and learn the current CLI syntax.
 
-If `ai-repo` is not found, try `export PATH="$HOME/Library/pnpm:$PATH"` first. If it still fails, tell the user to install the CLI and ensure it's on their PATH — do not attempt to manage their shell environment.
+**`ai-repo` not found?** It lives in pnpm's bin directory. Prefix the failing command with `PATH="$HOME/Library/pnpm:$PATH"` to fix it.
 
 ## Critical: app_id must be set before building
 
-When you register a new app with `ai-repo create-app`, the CLI returns an `app_id`. This is the id the platform will use as the SEMOSS `project_id` when the app is deployed — the frontend code must reference it at runtime. Before building and submitting, write the `app_id` to all three of these:
+When you register a new app with `ai-repo create-app`, the CLI returns an `app_id`. This is the id the platform will use as the SEMOSS `project_id` when the app is deployed — the frontend code must reference it at runtime. Before building and submitting:
 
-- `semoss_config/config.json` → `app_id` field
-- `client/public/config.json` → `projectId` and `appId` fields (copied to `portals/` at build time; the platform reads it when embedding the app)
-- `client/.env.local` → all three vars are baked into the JS bundle at build time via `define` in `vite.config.ts`; set them before building:
+- Save `app_id` to `semoss_config/environments.json` under `envs.<name>.app_id`
+- Write `client/.env.local` — vars are baked into the JS bundle at build time via `define` in `vite.config.ts`:
   ```
   APP=<app_id>
-  MODULE=<api_module_url>   # from semoss_config/config.json
-  ENDPOINT=<base_url>       # from semoss_config/config.json
+  MODULE=<api_module_url>   # from environments.json
+  ENDPOINT=<base_url>       # from environments.json
   ```
 
 If the build is submitted with a wrong or empty id, FE routes, asset paths, and pixel calls will all be wrong after deploy.

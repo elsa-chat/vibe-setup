@@ -1,9 +1,0 @@
-{
-	"projectId": "",
-	"appId": "",
-	"apiModuleUrl": "/Monolith",
-	"baseUrl": "https://your-instance.example.com/",
-	"webModuleUrl": "/SemossWeb",
-	"modelId": "",
-	"databaseId": ""
-}

@@ -21,7 +21,7 @@ GovConnect.ai, GovConnect, GCAI, and Semoss all refer to the same platform. User
 
 When the user wants to build or deploy a GovConnect.ai app, run these steps before proceeding. If MCP connectivity isn't available, note it and continue — not every user has platform access.
 
-1. **Credentials** — check `.mcp.json` for placeholder values. If found, ask the user for their GovConnect.ai access key and secret key, write them as `Authorization:Bearer <key>:<secret>`, then tell the user to restart Claude Code (MCP servers only load at startup).
+1. **Credentials** — check `.mcp.json` for placeholder values. If found, ask the user for their GovConnect.ai access key and secret key, write them as `Authorization:Bearer <key>:<secret>`, then tell the user to restart Claude Code and **stop here** — MCP servers only load at startup, so nothing that requires platform access will work until they restart and you confirm connectivity in step 3.
 2. **Project config** — read `semoss_config/environments.json`. If it has no envs configured, offer to set one up. Check that `semoss_config/credentials.env` exists — if not, ask the user for their keys and create it from `semoss_config/credentials.env.example`.
 3. **MCP connectivity** — call `get_agent_platform_instructions` to verify the MCP servers are reachable. If it fails, credentials in `.mcp.json` are likely wrong. Don't block on this — continue if the user doesn't have access.
 4. **Client dir** — if `node_modules/` is missing from `client/`, run `cd client && pnpm install`.
@@ -88,8 +88,6 @@ outDir: '../../portals', // build output goes here (relative to src/ root)
 
 Before any build, write `client/.env.local` with the target environment's values. `client/.env` has `ENDPOINT` and `MODULE` committed as defaults; `APP` is intentionally left commented out.
 
-`client/public/config.json` (camelCase) is copied to `portals/` at build time and available at runtime for values that aren't baked in (e.g. `modelId`, `databaseId`). Keep it in sync with the target environment's `environments.json` entry before building.
-
 ### Database Schemas
 
 Schemas from `get_schema()` are Base64-encoded — decode before use. Write decoded schema to `semoss_config/` for reference.
@@ -105,7 +103,7 @@ There are two deployment methods:
 
 Both methods can target any environment — the distinction is governance, not environment.
 
-### Before any build — sync `client/.env.local` and `client/public/config.json`
+### Before any build — write `client/.env.local`
 
 Write the target environment's values to `client/.env.local`:
 ```
@@ -113,8 +111,6 @@ APP=<envs.<name>.app_id>
 ENDPOINT=<envs.<name>.base_url>
 MODULE=<envs.<name>.api_module_url>
 ```
-
-Also update `client/public/config.json` with the target env's `projectId`, `modelId`, `databaseId`, etc.
 
 ### Build
 ```bash
@@ -145,7 +141,7 @@ python scripts/claude/semoss_asset_sync.py --env <name> --no-verify-ssl bulk-upl
 
 `ai-repo` submits a zip into an approval pipeline — it does **not** publish the app to users. After approval, an admin deploys server-side via `RepositoryDeployApp`, which auto-creates the SEMOSS project on the target instance.
 
-**Important: the ai-repo `app_id` IS the SEMOSS `project_id` at deploy time.** When building for ai-repo submission, `APP` in `client/.env.local` and `projectId` in `client/public/config.json` must be set to the `app_id` for the target environment — not a separately-created project ID. The deploy reactor synthesizes the `.smss` with `PROJECT={app_id}`, so any embedded refs need to match.
+**Important: the ai-repo `app_id` IS the SEMOSS `project_id` at deploy time.** When building for ai-repo submission, `APP` in `client/.env.local` must be set to the `app_id` for the target environment — not a separately-created project ID. The deploy reactor synthesizes the `.smss` with `PROJECT={app_id}`, so any embedded refs need to match.
 
 ```bash
 # First time: register the app on the target environment
@@ -186,19 +182,17 @@ The agent handles all environment switching. Users just name the target.
 ### "Deploy the app to `<env>`"
 1. Read `semoss_config/environments.json` → `envs.<env>`: `base_url`, `api_module_url`, `project_id`
 2. Write `client/.env.local`: `APP=<project_id>`, `ENDPOINT=<base_url>`, `MODULE=<api_module_url>`
-3. Update `client/public/config.json` with the env's values (`projectId`, `modelId`, etc.)
-4. `cd client && pnpm build && cd ..`
-5. `python scripts/claude/semoss_asset_sync.py --env <env> delete portals/assets --yes`
-6. `python scripts/claude/semoss_asset_sync.py --env <env> bulk-upload portals`
+3. `cd client && pnpm build && cd ..`
+4. `python scripts/claude/semoss_asset_sync.py --env <env> delete portals/assets --yes`
+5. `python scripts/claude/semoss_asset_sync.py --env <env> bulk-upload portals`
 
 ### "Submit for review on `<env>`"
 1. Read `semoss_config/environments.json` → `envs.<env>`: `base_url`, `api_module_url`, `app_id`
 2. Read `semoss_config/credentials.env` → `<ENV>_ACCESS_KEY`, `<ENV>_SECRET_KEY`
 3. Write `client/.env.local`: `APP=<app_id>`, `ENDPOINT=<base_url>`, `MODULE=<api_module_url>`
-4. Update `client/public/config.json` with `projectId=<app_id>` and the env's other values
-5. `cd client && pnpm build && cd ..`
-6. `ai-repo login --base-url <base_url>/Monolith --access-key <key> --secret-key <key>`
-7. `ai-repo publish --app <app_id> --notes "<notes>"`
+4. `cd client && pnpm build && cd ..`
+5. `ai-repo login --base-url <base_url>/Monolith --access-key <key> --secret-key <key>`
+6. `ai-repo publish --app <app_id> --notes "<notes>"`
 
 ## semoss_config/environments.json Shape
 
