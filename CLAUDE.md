@@ -8,9 +8,9 @@ GovConnect.ai, GovConnect, GCAI, and Semoss all refer to the same platform. User
 
 ## Key Files
 
-- `semoss_config/environments.json` — named environments: endpoints, project IDs, app IDs (committed, no secrets)
-- `semoss_config/credentials.env` — per-environment access/secret keys (gitignored, never commit)
-- `.mcp.json` — MCP server connections for the active session (gitignored, inline Bearer tokens)
+- `semoss_config/environments.json` — named environments: endpoints and app IDs (gitignored, copy from `environments.json.example`)
+- `semoss_config/credentials.env` — per-environment access/secret keys (gitignored, copy from `credentials.env.example`)
+- `.mcp.json` — MCP server connections with inline Bearer tokens (gitignored, copy from `.mcp.json.example`)
 - `client/` — React app source (pnpm, Vite, TypeScript, Tailwind v4)
 - `client/vite.config.ts` — must have `base: './'` and `outDir: '../../portals'`
 - `portals/` — build output (gitignored), uploaded to GovConnect.ai
@@ -21,8 +21,8 @@ GovConnect.ai, GovConnect, GCAI, and Semoss all refer to the same platform. User
 
 When the user wants to build or deploy a GovConnect.ai app, run these steps before proceeding. Getting platform instructions via MCP should happen before any app work — they provide up-to-date guidance that affects how you build. Always attempt this before starting.
 
-1. **Credentials** — check `.mcp.json` for placeholder values. If found, ask the user for their GovConnect.ai access key and secret key, write them as `Authorization:Bearer <key>:<secret>`, then tell the user to restart Claude Code and **stop here** — MCP servers only load at startup, so nothing that requires platform access will work until they restart and you confirm connectivity in step 3.
-2. **Project config** — read `semoss_config/environments.json`. If it has no envs configured, offer to set one up. Check that `semoss_config/credentials.env` exists — if not, ask the user for their keys and create it from `semoss_config/credentials.env.example`.
+1. **Credentials** — if `.mcp.json` doesn't exist, copy it from `.mcp.json.example`. Then check for placeholder values. If found, ask the user for their GovConnect.ai access key and secret key, write them as `Authorization:Bearer <key>:<secret>`, then tell the user to restart Claude Code and **stop here** — MCP servers only load at startup, so nothing that requires platform access will work until they restart and you confirm connectivity in step 3.
+2. **Project config** — if `semoss_config/environments.json` doesn't exist, copy it from `semoss_config/environments.json.example` and ask the user to fill in their environment details. Check that `semoss_config/credentials.env` exists — if not, ask the user for their keys and create it from `semoss_config/credentials.env.example`.
 3. **MCP connectivity** — call `get_agent_platform_instructions` to verify the MCP servers are reachable. If it fails, ask the user whether they have platform access before continuing — the instructions it returns should inform your work. Only proceed without it if the user confirms they don't have access.
 4. **Client dir** — if `node_modules/` is missing from `client/`, run `cd client && pnpm install`.
 
@@ -38,7 +38,7 @@ Set `base_url` to your instance's hostname. For `api_module_url` and `web_module
 | `https://host.com/prod/SemossWeb/...` | `https://host.com/` | `/prod/Monolith` | `/prod/SemossWeb` |
 | `https://host.com/demo/SemossWeb/...` | `https://host.com/` | `/demo/Monolith` | `/demo/SemossWeb` |
 
-Update `semoss_config/environments.json` (for the relevant env entry) and `.mcp.json` (for the active MCP session) when configuring a new instance.
+Update `semoss_config/environments.json` and `.mcp.json` when configuring a new instance.
 
 ## Tech Stack (for scaffolding)
 

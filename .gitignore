@@ -30,5 +30,6 @@ screenshots/*
 # IDE
 .idea/
 
-# MCP config contains inline credentials - ignore the file, but keep the template.
-# .mcp.json
+# Local config files — gitignored, copy from .example to get started.
+.mcp.json
+semoss_config/environments.json

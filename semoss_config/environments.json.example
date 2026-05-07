@@ -7,7 +7,6 @@
       "base_url": "https://your-instance.example.com/",
       "api_module_url": "/Monolith",
       "web_module_url": "/SemossWeb",
-      "project_id": "",
       "app_id": ""
     }
   }
