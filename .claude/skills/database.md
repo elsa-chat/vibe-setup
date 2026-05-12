@@ -1,25 +1,28 @@
 ---
 name: database
-description: Use when writing code in an app that queries a relational or graph database on the platform, running SELECTs, inserts, updates, deletes, or fetching schema/table structure. Covers the SqlQuery(), SqlQueryBase64(), and GetDatabaseTableStructure() pixel commands via @semoss/sdk's runPixel, plus listing databases with MyEngines(engineTypes=["DATABASE"]). Do not use for LLM calls (see model-engine) or vector database queries.
+description: Use when writing code in an app that queries a relational or graph database on the platform, running SELECTs, inserts, updates, deletes, or fetching schema/table structure. Covers the SqlQuery(), SqlQueryBase64(), and GetDatabaseTableStructure() pixel commands via the Semoss SDK, plus listing databases with MyEngines(engineTypes=["DATABASE"]). Do not use for LLM calls (see model) or vector database queries (see vector).
 ---
 
 # Database Engine
 
-Query a database on the platform using `runPixel` from `@semoss/sdk` with the `SqlQuery()` pixel command. `SqlQuery` auto-detects the SQL type and routes SELECTs through a `limit`-style path and inserts/updates/deletes through a `commit`-style path.
+Query a database on the platform using `actions.run()` from the `useInsight()` hook with the `SqlQuery()` pixel command. `SqlQuery` auto-detects the SQL type and routes SELECTs through a `limit`-style path and inserts/updates/deletes through a `commit`-style path.
 
 ## Usage
 
 ```typescript
-import { runPixel } from "@semoss/sdk";
+import { useInsight } from "@semoss/sdk/react";
 
+const { actions } = useInsight();
 const DATABASE_ID = "e188c7d8-076f-4847-967a-fff45f4ca355";
 const sql = "SELECT CITY FROM SALES_DATA_SAMPLE WHERE SALES_DATA_SAMPLE.DEALSIZE = 'Small'";
 
-const { errors, pixelReturn } = await runPixel(
-  `SqlQuery(database="${DATABASE_ID}", query="${sql}", limit=500);`,
+const { pixelReturn } = await actions.run(
+  `SqlQuery(database=${JSON.stringify(DATABASE_ID)}, query=${JSON.stringify(sql)}, limit=500);`,
 );
 
-if (errors.length) throw new Error(errors[0]);
+if (pixelReturn[0].operationType.includes("ERROR")) {
+  throw new Error(pixelReturn[0].output as string);
+}
 
 const { headers, values } = pixelReturn[0].output.data;
 // headers: ["CITY"]
@@ -34,7 +37,7 @@ const { headers, values } = pixelReturn[0].output.data;
 > that still can't be carried cleanly, use `SqlQueryBase64` (below)
 > instead.
 
-The variations below show only the pixel string — the one that goes inside the `runPixel` template literal. The surrounding `runPixel(...)` call, the `errors` check, and the response parsing are the same as above.
+The variations below show only the pixel string — the one that goes inside the `actions.run()` template literal. The surrounding `actions.run(...)` call, the error check, and the response parsing are the same as above.
 
 ### Insert / update / delete with SqlQuery
 
@@ -88,13 +91,17 @@ For the full response schema, see `references/response-schema.md`.
 Before running a query, you often need to let the user pick a database — or find one programmatically. Use the `MyEngines` pixel with `engineTypes=["DATABASE"]` to list databases the current user has access to.
 
 ```typescript
-import { runPixel } from "@semoss/sdk";
+import { useInsight } from "@semoss/sdk/react";
 
-const { errors, pixelReturn } = await runPixel(
+const { actions } = useInsight();
+
+const { pixelReturn } = await actions.run(
   `MyEngines(engineTypes=["DATABASE"], limit=[50], offset=[0]);`
 );
 
-if (errors.length) throw new Error(errors[0]);
+if (pixelReturn[0].operationType.includes("ERROR")) {
+  throw new Error(pixelReturn[0].output as string);
+}
 
 const databases = pixelReturn[0].output as Array<{
   engine_id: string;
@@ -130,9 +137,9 @@ const [databases, setDatabases] = useState<Database[]>([]);
 const [selectedId, setSelectedId] = useState<string>("");
 
 useEffect(() => {
-  runPixel(`MyEngines(engineTypes=["DATABASE"], limit=[50], offset=[0]);`)
+  actions.run(`MyEngines(engineTypes=["DATABASE"], limit=[50], offset=[0]);`)
     .then(({ pixelReturn }) => setDatabases(pixelReturn[0].output));
-}, []);
+}, [actions]);
 ```
 
 # Database query response schema

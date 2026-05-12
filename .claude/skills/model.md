@@ -1,34 +1,37 @@
 ---
 name: model
-description: Use when writing code in an app that calls an LLM, embedding model, or other model engine, OR when listing/selecting models the user has access to. Covers the LLM() and MyEngines() pixel commands via @semoss/sdk's runPixel, including prompt/completion calls, conversational history, image inputs, and parsing model responses. Do not use for vector database queries (see semoss-vector) or guardrail engines (see semoss-guardrail).
+description: Use when writing code in an app that calls an LLM, embedding model, or other model engine, OR when listing/selecting models the user has access to. Covers the LLM() and MyEngines() pixel commands via the Semoss SDK, including prompt/completion calls, conversational history, image inputs, and parsing model responses. Do not use for vector database queries (see vector) or raw SQL/graph queries (see database).
 ---
 
 # Model Engine
 
-Call models from the model using `runPixel` from `@semoss/sdk` with the `LLM()` pixel command.
+Call models from the platform using `actions.run()` from the `useInsight()` hook with the `LLM()` pixel command.
 
 ## Usage
 
 ```typescript
-import { runPixel } from "@semoss/sdk";
+import { useInsight } from "@semoss/sdk/react";
 
+const { actions } = useInsight();
 const prompt = "Hello";
 const MODEL_ID = "6dd0bbfd-cd3b-4f2c-b13a-fe4545872e3d";
 
-const { errors, pixelReturn } = await runPixel(
+const { pixelReturn } = await actions.run(
   `LLM(
-    engine="${MODEL_ID}",
-    command=["${prompt}"],
+    engine=${JSON.stringify(MODEL_ID)},
+    command=[${JSON.stringify(prompt)}],
     paramValues=[{"temperature":0.1, "max_tokens":2000}]
   );`,
 );
 
-if (errors.length) throw new Error(errors[0]);
+if (pixelReturn[0].operationType.includes("ERROR")) {
+  throw new Error(pixelReturn[0].output as string);
+}
 
 const response = pixelReturn[0].output.response;
 ```
 
-The variations below show only the pixel string — the one that goes inside the `runPixel` template literal. The surrounding `runPixel(...)` call, the `errors` check, and the response parsing are the same as above.
+The variations below show only the pixel string — the one that goes inside the `actions.run()` template literal. The surrounding `actions.run(...)` call, the error check, and the response parsing are the same as above.
 
 ### Conversational history
 
@@ -82,13 +85,17 @@ For the full response schema, see `references/response-schema.md`.
 Before calling a model, you often need to let the user pick one — or find one programmatically. Use the `MyEngines` pixel with `engineTypes=["MODEL"]` to list models the current user has access to.
 
 ```typescript
-import { runPixel } from "@semoss/sdk";
+import { useInsight } from "@semoss/sdk/react";
 
-const { errors, pixelReturn } = await runPixel(
+const { actions } = useInsight();
+
+const { pixelReturn } = await actions.run(
   `MyEngines(engineTypes=["MODEL"], limit=[50], offset=[0]);`
 );
 
-if (errors.length) throw new Error(errors[0]);
+if (pixelReturn[0].operationType.includes("ERROR")) {
+  throw new Error(pixelReturn[0].output as string);
+}
 
 const models = pixelReturn[0].output as Array<{
   engine_id: string;
@@ -124,9 +131,9 @@ const [models, setModels] = useState<Model[]>([]);
 const [selectedId, setSelectedId] = useState<string>("");
 
 useEffect(() => {
-  runPixel(`MyEngines(engineTypes=["MODEL"], limit=[50], offset=[0]);`)
+  actions.run(`MyEngines(engineTypes=["MODEL"], limit=[50], offset=[0]);`)
     .then(({ pixelReturn }) => setModels(pixelReturn[0].output));
-}, []);
+}, [actions]);
 ```
 
 # LLM response schema

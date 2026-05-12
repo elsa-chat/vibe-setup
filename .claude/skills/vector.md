@@ -1,25 +1,28 @@
 ---
 name: vector
-description: Use when writing code in an app that does semantic search, RAG, or ingests documents into a vector database on the platform — running nearest-neighbor queries, listing/adding/removing documents, or feeding retrieved chunks into an LLM. Covers VectorDatabaseQuery(), ListDocumentsInVectorDatabase(), CreateEmbeddingsFromDocuments(), CreateEmbeddingsFromVectorCSVFile(), and RemoveDocumentFromVectorDatabase() pixel commands via @semoss/sdk's runPixel, plus listing engines with MyEngines(engineTypes=["VECTOR"]). Do not use for raw SQL/graph queries (see database-engine) or direct LLM calls without retrieval (see model-engine).
+description: Use when writing code in an app that does semantic search, RAG, or ingests documents into a vector database on the platform — running nearest-neighbor queries, listing/adding/removing documents, or feeding retrieved chunks into an LLM. Covers VectorDatabaseQuery(), ListDocumentsInVectorDatabase(), CreateEmbeddingsFromDocuments(), CreateEmbeddingsFromVectorCSVFile(), and RemoveDocumentFromVectorDatabase() pixel commands via the Semoss SDK, plus listing engines with MyEngines(engineTypes=["VECTOR"]). Do not use for raw SQL/graph queries (see database) or direct LLM calls without retrieval (see model).
 ---
 
 # Vector Engine
 
-Query and manage a vector database on the platform using `runPixel` from `@semoss/sdk` with the `VectorDatabaseQuery()` pixel command as the primary entry point. Results are typically passed into an `LLM()` call to implement RAG — see the [RAG pattern](#rag-pattern) section below.
+Query and manage a vector database on the platform using `actions.run()` from the `useInsight()` hook with the `VectorDatabaseQuery()` pixel command as the primary entry point. Results are typically passed into an `LLM()` call to implement RAG — see the [RAG pattern](#rag-pattern) section below.
 
 ## Usage
 
 ```typescript
-import { runPixel } from "@semoss/sdk";
+import { useInsight } from "@semoss/sdk/react";
 
+const { actions } = useInsight();
 const VECTOR_ID = "1222b449-1bc6-4358-9398-1ed828e4f26a";
 const query = "Time sheet";
 
-const { errors, pixelReturn } = await runPixel(
-  `VectorDatabaseQuery(engine="${VECTOR_ID}", command="${query}", limit=5, filters=[], metaFilters=[]);`,
+const { pixelReturn } = await actions.run(
+  `VectorDatabaseQuery(engine=${JSON.stringify(VECTOR_ID)}, command=${JSON.stringify(query)}, limit=5, filters=[], metaFilters=[]);`,
 );
 
-if (errors.length) throw new Error(errors[0]);
+if (pixelReturn[0].operationType.includes("ERROR")) {
+  throw new Error(pixelReturn[0].output as string);
+}
 
 const hits = pixelReturn[0].output as Array<{
   Score: number;
@@ -37,7 +40,7 @@ const hits = pixelReturn[0].output as Array<{
 
 Each hit carries both the text chunk (`Content`) and the source document (`Source`), plus hybrid-search scoring fields. Lower `Score` is closer; `Weighted_RRF_Score` and `BM25_Score` are the underlying component scores from the hybrid rank fusion.
 
-The variations below show only the pixel string — the one that goes inside the `runPixel` template literal. The surrounding `runPixel(...)` call, the `errors` check, and the response parsing are the same as above.
+The variations below show only the pixel string — the one that goes inside the `actions.run()` template literal. The surrounding `actions.run(...)` call, the error check, and the response parsing are the same as above.
 
 ### Filtering by source document
 
@@ -131,17 +134,18 @@ For the full response schema of each pixel, see `references/response-schema.md`.
 
 ## RAG pattern
 
-The typical flow is a two-step chain: retrieve chunks with `VectorDatabaseQuery`, then feed them into an `LLM()` call as grounding context. See the `model-engine` skill for the LLM half.
+The typical flow is a two-step chain: retrieve chunks with `VectorDatabaseQuery`, then feed them into an `LLM()` call as grounding context. See the `model` skill for the LLM half.
 
 ```typescript
-import { runPixel } from "@semoss/sdk";
+import { useInsight } from "@semoss/sdk/react";
 
+const { actions } = useInsight();
 const VECTOR_ID = "1222b449-1bc6-4358-9398-1ed828e4f26a";
 const MODEL_ID = "6dd0bbfd-cd3b-4f2c-b13a-fe4545872e3d";
 const question = "Time sheet";
 
-const { pixelReturn: retrievalReturn } = await runPixel(
-  `VectorDatabaseQuery(engine="${VECTOR_ID}", command="${question}", limit=3);`,
+const { pixelReturn: retrievalReturn } = await actions.run(
+  `VectorDatabaseQuery(engine=${JSON.stringify(VECTOR_ID)}, command=${JSON.stringify(question)}, limit=3);`,
 );
 
 const hits = retrievalReturn[0].output as Array<{ Source: string; Content: string }>;
@@ -151,8 +155,8 @@ const context = hits
 
 const prompt = `Answer the question using only the context below.\n\nQuestion: ${question}\n\nContext:\n\`\`\`\n${context}\n\`\`\``;
 
-const { pixelReturn: answerReturn } = await runPixel(
-  `LLM(engine="${MODEL_ID}", command=["${prompt}"], paramValues=[{"temperature":0.1}]);`,
+const { pixelReturn: answerReturn } = await actions.run(
+  `LLM(engine=${JSON.stringify(MODEL_ID)}, command=[${JSON.stringify(prompt)}], paramValues=[{"temperature":0.1}]);`,
 );
 
 const answer = answerReturn[0].output.response;
@@ -165,13 +169,17 @@ Keep the prompt explicit about citing `Source` and `Part`/`Divider` so the model
 Before querying, you often need to let the user pick a vector database — or find one programmatically. Use `MyEngines` with `engineTypes=["VECTOR"]`.
 
 ```typescript
-import { runPixel } from "@semoss/sdk";
+import { useInsight } from "@semoss/sdk/react";
 
-const { errors, pixelReturn } = await runPixel(
+const { actions } = useInsight();
+
+const { pixelReturn } = await actions.run(
   `MyEngines(engineTypes=["VECTOR"], limit=[50], offset=[0]);`
 );
 
-if (errors.length) throw new Error(errors[0]);
+if (pixelReturn[0].operationType.includes("ERROR")) {
+  throw new Error(pixelReturn[0].output as string);
+}
 
 const vectorEngines = pixelReturn[0].output as Array<{
   engine_id: string;
@@ -207,9 +215,9 @@ const [engines, setEngines] = useState<VectorEngine[]>([]);
 const [selectedId, setSelectedId] = useState<string>("");
 
 useEffect(() => {
-  runPixel(`MyEngines(engineTypes=["VECTOR"], limit=[50], offset=[0]);`)
+  actions.run(`MyEngines(engineTypes=["VECTOR"], limit=[50], offset=[0]);`)
     .then(({ pixelReturn }) => setEngines(pixelReturn[0].output));
-}, []);
+}, [actions]);
 ```
 
 # Vector engine response schemas

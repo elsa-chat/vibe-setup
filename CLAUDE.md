@@ -57,6 +57,15 @@ Figure out which mode the user wants as early as possible — it determines whet
 - `classes/`, `target/` — Java build artifacts (gitignored)
 - `scripts/claude/semoss_asset_sync.py` — deploy script
 - `docs/theme.md` — color palette reference
+- `.claude/skills/{database,model,vector}.md` — pixel command references that auto-invoke on relevant keywords (see "Platform skills" below)
+
+## Platform skills
+
+The files in `.claude/skills/` (`database.md`, `model.md`, `vector.md`) auto-invoke on relevant keywords and document pixel commands and response schemas for SQL/graph databases, model engines, and vector engines. The pixel shapes and response schemas in them are accurate and worth relying on; the surrounding frontend code is mostly right but not always idiomatic to this template. When patterns diverge, prefer the project's canonical conventions:
+
+- Use `useInsight()` + `actions.run()` (see `ExampleComponent.tsx`), not bare `runPixel` from `@semoss/sdk`.
+- Wrap any interpolated runtime value in `JSON.stringify()` — never raw `"${value}"` inside a pixel string.
+- Check errors via `pixelReturn[0].operationType.includes("ERROR")`, not a separate `errors` array.
 
 ## Startup Checklist
 
