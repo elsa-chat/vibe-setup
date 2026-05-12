@@ -36,7 +36,7 @@ A template for building web apps on the Elsa Platform with Claude Code. The apps
 |------|---------|---------|
 | Node.js | 20.19+ | [nodejs.org](https://nodejs.org) or `brew install node` |
 | pnpm | 10.x | `corepack enable && corepack prepare pnpm@latest --activate` |
-| Python | 3.10+ | Pre-installed on most systems |
+| Python | 3.10+ | Pre-installed on most systems. Only needed for the deploy script — see the no-Python path under Deploy |
 | Claude Code | latest | [claude.ai/code](https://claude.ai/code) |
 
 ## Directory Guide
@@ -86,17 +86,26 @@ Detailed patterns and rules (do/don't, `useInsight` hook, `sendMCPResponseToPlay
 
 ## Deploy
 
-Deploy = build → upload → publish.
+Deploy = build → upload (which auto-publishes).
 
 ```bash
 cd client && pnpm build && cd ..
-python scripts/claude/semoss_asset_sync.py --env <name> delete portals/assets --yes
-python scripts/claude/semoss_asset_sync.py --env <name> bulk-upload portals
+python scripts/claude/semoss_asset_sync.py --env <name> bulk-upload portals py java mcp
 ```
 
-Then, via the `Semoss_project_manager` MCP, call `publish_project(project_id="<app_id>")` to snapshot the uploaded assets to the public portal.
+`<name>` matches an entry in `semoss_config/environments.json` (e.g. `dev`, `prod`). First-time apps are created with `Semoss_project_manager.create_project` — save the returned `app_id` into `environments.json`. Add `--no-delete-existing` on the first deploy to skip the browse-and-delete pass.
 
-`<name>` matches an entry in `semoss_config/environments.json` (e.g. `dev`, `prod`). First-time apps are created with `Semoss_project_manager.create_project` — save the returned `app_id` into `environments.json`.
+The script auto-compiles Java reactors (via `CompileAppReactors`) and auto-publishes at the end, so a normal deploy is just the one command above. Pass `--no-compile` if you specifically want to skip compilation (e.g., when you only changed frontend files).
+
+### No Python? Use the Elsa UI editor
+
+If Python isn't available, skip the sync script and drag files in manually. Open the editor at:
+
+```
+<base_url><web_module_url>/packages/client/dist/#/app/<app_id>/edit
+```
+
+Drag in `portals/` (always), plus `py/`, `java/`, and `mcp/` if your app uses any of them. Then click **"Compile and publish the app"** in the editor — that one button compiles any Java sources and publishes the project so the new assets become visible.
 
 ## Credentials
 

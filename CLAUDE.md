@@ -115,15 +115,16 @@ Schemas from `get_schema()` are Base64-encoded — decode before use. Write deco
 
 ## Build & Deploy
 
-Deploy = build locally → upload assets → publish on the platform.
+Deploy = create (once) → build → upload (which auto-compiles Java and auto-publishes).
 
 | Step | Tool | Notes |
 |---|---|---|
 | **Create the app** | `Semoss_project_manager.create_project` MCP | Once per app, per environment. Returns the `app_id` — save it to `environments.json` |
-| **Upload assets** | `scripts/claude/semoss_asset_sync.py` (Python) | Reads `app_id` from `environments.json`. Python 3.10+ required |
-| **Publish** | `Semoss_project_manager.publish_project` MCP | Snapshots uploaded assets to the public portal — files must already be uploaded |
+| **Upload assets** | `scripts/claude/semoss_asset_sync.py` (Python) | Compiles Java reactors (`CompileAppReactors`) and publishes (`PublishProject`) at the end of the run. Python 3.10+ required |
 
 The platform itself recommends `semoss_asset_sync.py` for asset transfer (per `get_agent_platform_instructions`). There is no upload tool exposed via the MCPs — only project lifecycle (create/publish/delete/tag) and file listing/deletion.
+
+**No Python?** The sync script step can be replaced with a manual drag-and-drop in the Elsa UI editor — see "Upload assets (manual UI alternative)" below.
 
 ### 1. Create the app on the platform (first time only)
 
@@ -159,32 +160,51 @@ cd client && pnpm build
 
 ### 4. Upload assets (sync script)
 
-The `--env` flag tells the script which entry to read from `semoss_config/environments.json` and `semoss_config/credentials.env`.
+One command uploads all asset directories and auto-publishes:
 
 ```bash
-python scripts/claude/semoss_asset_sync.py --env <name> delete portals/assets --yes
-python scripts/claude/semoss_asset_sync.py --env <name> bulk-upload portals
+python scripts/claude/semoss_asset_sync.py --env <name> bulk-upload portals py java mcp
 ```
 
-**First deploy only:** skip the `delete` step — the remote path doesn't exist yet:
+The `--env` flag tells the script which entry to read from `semoss_config/environments.json` and `semoss_config/credentials.env`. `bulk-upload` walks each directory recursively, browses-and-deletes any existing files at the same remote paths before uploading the new versions, and calls `PublishProject` at the end.
+
+It's safe to pass directories the app doesn't use — empty ones are no-ops. For a frontend-only app you can pass just `portals`, but uploading all four hurts nothing.
+
+**First deploy:** add `--no-delete-existing` to skip the browse-and-delete step (faster, and there's nothing to delete yet):
 ```bash
-python scripts/claude/semoss_asset_sync.py --env <name> bulk-upload portals
+python scripts/claude/semoss_asset_sync.py --env <name> bulk-upload portals py java mcp --no-delete-existing
 ```
 
 **Self-signed SSL certificates (preprod):**
 ```bash
-python scripts/claude/semoss_asset_sync.py --env <name> --no-verify-ssl bulk-upload portals
+python scripts/claude/semoss_asset_sync.py --env <name> --no-verify-ssl bulk-upload portals py java mcp
 ```
 
-### 5. Publish
+**Java reactors:** the script calls `CompileAppReactors(project='<app_id>')` before publishing, so `.java` changes get recompiled into `classes/` automatically. If you specifically want to skip compilation (e.g. you only changed frontend files), pass `--no-compile`.
 
-After uploading, publish so the assets become visible to users:
+**Removed files:** `bulk-upload`'s default delete behavior only clears files it's about to overwrite. Files that exist remotely but were deleted locally stick around as orphans. To nuke a whole remote subtree before re-uploading, run an explicit delete first:
+```bash
+python scripts/claude/semoss_asset_sync.py --env <name> delete <remote/path> --yes
+```
+
+### Upload assets (manual UI alternative — no Python required)
+
+If Python isn't available, replace step 4 with a drag-and-drop in the Elsa UI editor. Open this URL in a browser, where `<app_id>` is the project's `app_id` from `environments.json`:
 
 ```
-publish_project(project_id="<app_id>")
+<base_url><web_module_url>/packages/client/dist/#/app/<app_id>/edit
 ```
 
-Publishing snapshots the uploaded assets into the public portal. It does **not** upload files — that must already be done.
+Example: `http://localhost:9090/SemossWeb/packages/client/dist/#/app/<app_id>/edit`
+
+Drag these directories from the local repo into the editor:
+
+- `portals/` — built frontend (always required)
+- `py/` — Python tools (only if the app exposes Python MCP tools)
+- `java/` — Java reactors (only if the app has Java reactors)
+- `mcp/` — MCP tool manifests (only if the app exposes MCP tools)
+
+Then click **"Compile and publish the app"** in the editor. This button does both jobs in one step — compiles any Java sources you uploaded and publishes the project so the new assets become visible.
 
 ## Exposing the App as MCP Tools
 
@@ -195,7 +215,7 @@ Once a web app is built and deployed, individual pages or backend reactors can b
 1. **Tag the project as MCP-enabled.** Either pass `mcp=True` to `create_project` at creation time, or call `attach_tag(project_id, "MCP")` on an existing project.
 2. **Declare your tools.** Add functions to `py/mcp_driver.py` (Python) or reactors under `java/src/reactors/` (Java).
 3. **Update the manifest.** Add or modify the tool's entry in `mcp/py_mcp.json` (Python) or `mcp/pixel_mcp.json` (Java). Edit the JSON directly — each entry just declares the name, input schema, description, and a bit of render metadata. The existing entries are working examples to copy from.
-4. **Re-upload and publish.** Same flow as a normal deploy.
+4. **Re-deploy.** Run the normal upload flow — `bulk-upload portals py java mcp` auto-publishes.
 
 ### useInsight() and the tool context
 
@@ -262,6 +282,7 @@ The SDK also exposes a method `actions.runMCPTool(name, params)` (camelCase). It
 - `IModelEngine.ask()` returns a response object. Use reflection to call `.getResponse()`; never `toString()` it
 - Resolve a model engine by ID with `prerna.util.Utility.getModel(modelId)` — returns null if not found
 - For file paths within the project, use `this.insight.getInsightFolder()`
+- The sync script auto-runs `CompileAppReactors` before publishing, so `.java` changes get compiled to bytecode automatically. For manual UI uploads, the user has to click "Compile and publish the app" in the editor
 
 ### Python MCP tool rules
 
@@ -306,9 +327,7 @@ The agent handles all environment switching. Users just name the target.
 1. Read `semoss_config/environments.json` → `envs.<env>`: `base_url`, `api_module_url`, `app_id`
 2. Write `client/.env.local`: `APP=<app_id>`, `ENDPOINT=<base_url>`, `MODULE=<api_module_url>`
 3. `cd client && pnpm build && cd ..`
-4. `python scripts/claude/semoss_asset_sync.py --env <env> delete portals/assets --yes` (skip on first deploy)
-5. `python scripts/claude/semoss_asset_sync.py --env <env> bulk-upload portals`
-6. Call `publish_project(project_id="<app_id>")` via the `Semoss_project_manager` MCP
+4. `python scripts/claude/semoss_asset_sync.py --env <env> bulk-upload portals py java mcp` (auto-compiles and auto-publishes; add `--no-delete-existing` on first deploy)
 
 ## semoss_config/environments.json Shape
 
@@ -359,13 +378,14 @@ Copy from `semoss_config/credentials.env.example`. Gitignored — never commit.
 
 - **Project names must be unique** — `create_project` returns a hard error if the name already exists on the platform. Pick a unique name or check first with `search_project`.
 - **Update `environments.json` before running the sync script** — `semoss_asset_sync.py` reads `app_id` from the target env's entry. When creating a new project, save the new `app_id` into `environments.json` before running the deploy, or files will go to the wrong project.
-- **Publish ≠ upload** — `publish_project` snapshots assets that are already uploaded. Always run `bulk-upload` first, then `publish_project`.
+- **Publish ≠ upload** — `publish_project` snapshots already-uploaded assets to the public portal. The sync script's `bulk-upload` auto-publishes at the end so a separate publish call is usually unnecessary. `publish_project` is still useful for manually-uploaded assets or for republishing without changing files.
 
 ## URL Patterns
 
 | Purpose | Pattern |
 |---------|---------|
 | App view | `<base_url><web_module_url>/packages/client/dist/#/app/<app_id>/view` |
+| App editor (drag files in for manual upload) | `<base_url><web_module_url>/packages/client/dist/#/app/<app_id>/edit` |
 | Database | `<base_url><web_module_url>/packages/client/dist/#/engine/database/<database_id>` |
 
 ## Tagging

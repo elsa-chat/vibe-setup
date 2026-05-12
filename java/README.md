@@ -30,7 +30,7 @@ See `GetWeatherReactor.java` for a working example.
 
 ## Compiling
 
-After making changes, click **"Recompile reactors"** in the Elsa UI editor. This compiles `.java` files into `classes/` (created automatically on the platform) and makes them available immediately.
+When deploying via `semoss_asset_sync.py`, the script auto-runs `CompileAppReactors` before publishing — `.java` changes get compiled to bytecode automatically. When uploading via the Elsa UI editor instead, click **"Compile and publish the app"** in the editor after dragging files in (it does both compile and publish in one step).
 
 ## Declaring a Reactor as an MCP Tool
 

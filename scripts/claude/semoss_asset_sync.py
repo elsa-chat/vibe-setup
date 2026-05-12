@@ -387,6 +387,11 @@ def publish_project(server_connection, project_id: str) -> object:
     return run_project_pixel(server_connection, pixel)
 
 
+def compile_app_reactors(server_connection, project_id: str) -> object:
+    pixel = f"CompileAppReactors(project='{project_id}');"
+    return run_project_pixel(server_connection, pixel)
+
+
 def confirm_remote_delete(remote_file_path: str) -> bool:
     response = input(f"Remote asset {remote_file_path} exists. Delete it before upload? [y/N]: ")
     return response.strip().lower() in {"y", "yes"}
@@ -603,6 +608,7 @@ def bulk_upload_to_semoss(
     *,
     publish: bool = True,
     delete_existing: bool = True,
+    compile_reactors: bool = True,
 ) -> int:
     """Upload many files in one process, reusing one ServerClient and insight.
 
@@ -679,6 +685,13 @@ def bulk_upload_to_semoss(
 
     print(f"Bulk upload complete: {len(uploaded)} uploaded, {len(deleted)} replaced.")
 
+    if compile_reactors:
+        print("Compiling reactors...")
+        compile_result = compile_app_reactors(server_connection, project_id)
+        print(json.dumps(compile_result, indent=2, default=str))
+    else:
+        print("Skipping compile (--no-compile).")
+
     if publish:
         print("Publishing project...")
         result = publish_project(server_connection, project_id)
@@ -724,6 +737,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip the post-upload PublishProject call (useful when chaining multiple uploads).",
     )
+    upload_parser.add_argument(
+        "--no-compile",
+        action="store_true",
+        help="Skip the post-upload CompileAppReactors call (useful when chaining multiple uploads).",
+    )
 
     bulk_parser = subparsers.add_parser(
         "bulk-upload",
@@ -738,6 +756,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-publish",
         action="store_true",
         help="Skip the final PublishProject call (use when chaining multiple bulk-upload invocations).",
+    )
+    bulk_parser.add_argument(
+        "--no-compile",
+        action="store_true",
+        help="Skip the CompileAppReactors call (use when no Java reactor changes were uploaded).",
     )
     bulk_parser.add_argument(
         "--no-delete-existing",
@@ -809,6 +832,7 @@ def upload_local_file_to_semoss(
     *,
     assume_yes: bool = False,
     publish: bool = True,
+    compile_reactors: bool = True,
 ) -> int:
     if not local_file.exists() or not local_file.is_file():
         raise SystemExit(f"Local file not found: {local_file}")
@@ -838,6 +862,10 @@ def upload_local_file_to_semoss(
         print(json.dumps(delete_result, indent=2, default=str))
 
         if publish:
+            if compile_reactors:
+                delete_compile_result = compile_app_reactors(server_connection, project_id)
+                print("Compiled reactors after deletion")
+                print(json.dumps(delete_compile_result, indent=2, default=str))
             delete_publish_result = publish_project(server_connection, project_id)
             print("Published project after deletion")
             print(json.dumps(delete_publish_result, indent=2, default=str))
@@ -858,6 +886,13 @@ def upload_local_file_to_semoss(
     print(f"Remote directory: {remote_directory}")
     print(f"Remote asset: {remote_file_path}")
     print(json.dumps(upload_result, indent=2, default=str))
+
+    if compile_reactors:
+        compile_result = compile_app_reactors(server_connection, project_id)
+        print("Compiled reactors after upload")
+        print(json.dumps(compile_result, indent=2, default=str))
+    else:
+        print("Skipping compile (--no-compile).")
 
     if publish:
         publish_result = publish_project(server_connection, project_id)
@@ -938,6 +973,10 @@ def delete_remote_assets(remote_path: str, skip_confirm: bool, verify_ssl: bool 
         except Exception as e:
             print(f"Failed to delete {f}: {e}")
 
+    compile_result = compile_app_reactors(server_connection, project_id)
+    print(f"\nCompiled reactors after deletion")
+    print(json.dumps(compile_result, indent=2, default=str))
+
     publish_result = publish_project(server_connection, project_id)
     print(f"\nPublished project after deletion")
     print(json.dumps(publish_result, indent=2, default=str))
@@ -953,6 +992,7 @@ def bulk_upload_command(
     *,
     no_publish: bool,
     no_delete_existing: bool,
+    no_compile: bool,
     verify_ssl: bool = True,
     env_name: str | None = None,
 ) -> int:
@@ -968,11 +1008,15 @@ def bulk_upload_command(
         server_connection=server_connection,
         publish=not no_publish,
         delete_existing=not no_delete_existing,
+        compile_reactors=not no_compile,
     )
 
 
 def publish_command(verify_ssl: bool = True, env_name: str | None = None) -> int:
     _, project_id, server_connection = build_semoss_context(verify_ssl=verify_ssl, env_name=env_name)
+    print(f"Compiling reactors for {project_id}...")
+    compile_result = compile_app_reactors(server_connection, project_id)
+    print(json.dumps(compile_result, indent=2, default=str))
     print(f"Publishing project {project_id}...")
     result = publish_project(server_connection, project_id)
     print(json.dumps(result, indent=2, default=str))
@@ -995,6 +1039,7 @@ def main() -> int:
             args.paths,
             no_publish=args.no_publish,
             no_delete_existing=args.no_delete_existing,
+            no_compile=args.no_compile,
             verify_ssl=verify_ssl,
             env_name=env_name,
         )
@@ -1010,6 +1055,7 @@ def main() -> int:
         server_connection,
         assume_yes=args.yes,
         publish=not args.no_publish,
+        compile_reactors=not args.no_compile,
     )
 
 
