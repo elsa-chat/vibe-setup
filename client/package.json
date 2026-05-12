@@ -3,8 +3,7 @@
 	"scripts": {
 		"dev": "vite",
 		"build": "vite build",
-		"fix": "biome format --write && biome lint",
-		"test:run": "vitest run"
+		"fix": "biome format --write && biome lint"
 	},
 	"dependencies": {
 		"@radix-ui/react-label": "^2.1.8",
