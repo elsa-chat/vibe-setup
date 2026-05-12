@@ -259,20 +259,26 @@ python scripts/claude/semoss_asset_sync.py --env <name> delete <remote/path> --y
 
 If Python isn't available, replace step 4 with a manual upload through the Elsa UI editor. The editor **only accepts zip files** (not raw folders), so the agent should bundle the asset directories into a single zip first, then have the user drag that zip in.
 
-**1. Bundle the assets.** From the project root, use the platform-native command:
+**1. Bundle the assets.** From the project root, on every platform:
 
-- **macOS / Linux:**
-  ```bash
-  zip -r elsa-bundle.zip portals py java mcp
-  ```
-- **Windows:** shell out to PowerShell so it works the same regardless of which shell Claude Code is running in (cmd, PowerShell, Git Bash, WSL):
-  ```bash
-  powershell -Command "Compress-Archive -Path portals,py,java,mcp -DestinationPath elsa-bundle.zip -Force"
-  ```
+```bash
+zip -r elsa-bundle.zip portals py java mcp
+```
 
-Don't use `tar` here. Windows ships BSD tar that *can* produce zip via `tar -a`, but when Git Bash is on PATH it silently shadows that binary with GNU tar (which doesn't speak zip format) and produces a tar file with a `.zip` extension. Elsa rejects it with "zip END header not found". `zip` and `Compress-Archive` are unambiguous — they always produce real zips.
+This works on macOS and Linux out of the box, and on Windows it works because Git Bash (which Claude Code's Bash tool uses) ships `zip.exe`. If only some of `portals/`, `py/`, `java/`, `mcp/` exist in the project, drop the missing ones from the path list. A fresh template clone has all four.
 
-If only some of `portals/`, `py/`, `java/`, `mcp/` exist in the project, drop the missing ones from the path list. A fresh template clone has all four.
+What **not** to do on Windows:
+
+- **Don't run a bare `tar -a -c -f elsa-bundle.zip ...`.** Git Bash silently shadows the native `tar.exe` on PATH with GNU tar, which doesn't speak zip and writes a tar file with a misleading `.zip` extension. Elsa rejects it with "zip END header not found".
+- **Don't use PowerShell's `Compress-Archive`.** It produces zips with backslash path separators that Elsa's server-side Java unzip mishandles — symptom is "Unable to unzip file. X not a directory" partway through extraction.
+
+If `zip` isn't available (e.g. the user is running the command themselves in cmd or PowerShell instead of through the Bash tool), use the native bsdtar at its absolute path:
+
+```
+C:\Windows\System32\tar.exe -a -c -f elsa-bundle.zip portals py java mcp
+```
+
+(Or `/c/Windows/System32/tar.exe ...` from Git Bash / WSL.) The absolute path forces use of the BSD tar Windows ships, bypassing Git Bash's GNU-tar hijack.
 
 **2. Open the editor** in a browser, where `<app_id>` is the project's `app_id` from `environments.json`:
 
