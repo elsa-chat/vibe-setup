@@ -78,11 +78,16 @@ Tech stack: React 18, TypeScript, Vite 8, Tailwind CSS v4, shadcn/ui, TanStack Q
 
 Exposing functionality as MCP tools is mostly a declaration step on top of code you already have.
 
+The `MCP` project tag is what makes an app surface in Elsa chat. For new projects, your agent passes `mcp=True` to `create_project`. For a standalone app you're converting, the agent calls `attach_tag(project_id="<app_id>", tag="MCP")`. Without the tag, the tools never appear in chat regardless of what's in `mcp/*.json`.
+
 **Python tools** live in `py/mcp_driver.py`. Decorate any function with `@mcp_metadata({...})` and Elsa picks it up. Type hints become the input schema; the docstring becomes the description. Two examples ship in the template — replace them with your own.
 
 **Java tools** are reactors under `java/src/reactors/` that extend `AbstractProjectReactor`. The included `GetWeatherReactor` is a working example.
 
-**Declare your tools in the manifest.** Add or update entries in `mcp/py_mcp.json` (Python tools) or `mcp/pixel_mcp.json` (Java reactors), then redeploy. Each tool entry lists the function name, input schema, description, and a bit of metadata about how Elsa should render it. The existing entries are working examples to copy from.
+**Declare your tools in the manifest.** Each tool entry lists the function name, input schema, description, and a bit of metadata about how Elsa should render it. The existing entries are working examples to copy from.
+
+- `mcp/py_mcp.json` is **always required** for any Python backend logic — the frontend dispatches Python calls through the `RunMCPTool` reactor, which reads this manifest.
+- `mcp/pixel_mcp.json` is **only required when exposing a Java reactor to Elsa chat**. App-internal Java calls (`actions.run('Foo(...)')`) work without a manifest entry.
 
 Each tool can render with either Elsa's auto-generated form (simple input/output) or a custom React UI in `client/` (rich interaction). Custom UIs are wired by setting `resourceURI` in the manifest entry to a hash route (e.g. `/#/forecast`) and adding the matching route in `client/src/pages/Router.tsx`. See `client/src/components/ExampleComponent.tsx` for the full custom-UI pattern.
 

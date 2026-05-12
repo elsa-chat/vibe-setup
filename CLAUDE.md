@@ -15,6 +15,30 @@ Two exceptions where "Semoss" stays:
 - The **Semoss SDK** (`@semoss/sdk`) — the SDK keeps its name regardless of how the platform is referred to
 - File and identifier names like `semoss_config/`, `semoss_asset_sync.py`, `Semoss_Platform_Instructions`, `Semoss_project_manager`, `Semoss_database_helper`, `/SemossWeb`, `/Monolith` — these are technical identifiers that don't get renamed
 
+## App type: standalone vs MCP
+
+The template scaffolds a single app that works as either:
+
+- A **standalone web app** — users open the portal URL and interact with the page.
+- An **MCP-enabled app** — the same app, plus its tools are callable from Elsa chat alongside the platform's own.
+
+Mechanically the two modes are almost identical. The frontend, Python tools in `py/mcp_driver.py`, Java reactors under `java/src/reactors/`, and the manifests in `mcp/*.json` are part of both. What matters is *what the app does*, not which mode it's in:
+
+- **Python backend logic always needs `mcp/py_mcp.json`.** The frontend dispatches Python calls through the `RunMCPTool` Pixel reactor, which reads this manifest. No manifest entry, no dispatch.
+- **Java reactors don't need `mcp/pixel_mcp.json` for app-internal calls.** The frontend calls Java directly via `actions.run('Foo(...)')`. `pixel_mcp.json` is only required when exposing a Java reactor as a tool in Elsa chat.
+
+**The one meaningful difference is the `MCP` project tag**, which gates whether the app's tools surface in Elsa chat:
+
+- Tagged `MCP` → tools appear in chat
+- Untagged → tools don't appear in chat, but the app still works as a standalone web app and can call its own Python/Java backend through the manifests
+
+When to set the tag:
+
+- **At creation:** pass `mcp=True` to `create_project` if the user wants Elsa-chat visibility from the start.
+- **Later:** call `attach_tag(project_id="<app_id>", tag="MCP")` to flip an existing standalone project into MCP-enabled. See "Converting a standalone app to MCP" in the MCP Tools section.
+
+Figure out which mode the user wants as early as possible — it determines whether to flip the tag, not whether to fill in `mcp/` or `py/`.
+
 ## Key Files
 
 - `semoss_config/environments.json` — named environments: endpoints and app IDs (gitignored, copy from `environments.json.example`)
@@ -135,8 +159,8 @@ Don't ignore the TLS error or get stuck retrying — these are setup issues, not
 
 The platform supports two backend approaches; pick per use case rather than per app — many apps end up with both.
 
-- **Python** (`py/mcp_driver.py`) — fastest for simple transforms, API calls, and quick prototypes. Functions decorated with `@mcp_metadata` become MCP tools; their type hints become the input schema. Called from the frontend via `actions.runPy(...)` for stateful execution, or via `actions.run('RunMCPTool(function=["<name>"], paramValues=[{...}])')` to invoke as an MCP tool. After adding or changing tools, update the corresponding entry in `mcp/py_mcp.json`.
-- **Java** (`java/src/reactors/`) — better for complex logic, DB access, heavy computation, or LLM calls. Extend `AbstractProjectReactor` (the project's base class — handles `preExecute`, error wrapping, and config loading). Called from the frontend via `actions.run('ReactorName(param=["value"])')` — note the `Reactor` suffix is stripped. After adding or changing reactors, update the corresponding entry in `mcp/pixel_mcp.json`.
+- **Python** (`py/mcp_driver.py`) — fastest for simple transforms, API calls, and quick prototypes. Functions decorated with `@mcp_metadata` become MCP tools; their type hints become the input schema. Called from the frontend via `actions.runPy(...)` for stateful execution, or via `actions.run('RunMCPTool(function=["<name>"], paramValues=[{...}])')` to invoke as an MCP tool. **Always update `mcp/py_mcp.json` after adding or changing tools** — `RunMCPTool` reads this manifest to dispatch, so without an entry the frontend can't reach the function.
+- **Java** (`java/src/reactors/`) — better for complex logic, DB access, heavy computation, or LLM calls. Extend `AbstractProjectReactor` (the project's base class — handles `preExecute`, error wrapping, and config loading). Called from the frontend via `actions.run('ReactorName(param=["value"])')` — note the `Reactor` suffix is stripped. Frontend calls work without any manifest update; `mcp/pixel_mcp.json` is only needed if you also want the reactor exposed as a tool in Elsa chat.
 
 Don't steer users away from Java. It's fully supported and often the right choice.
 
@@ -198,12 +222,14 @@ The platform itself recommends `semoss_asset_sync.py` for asset transfer (per `g
 
 Use the `Semoss_project_manager.create_project` MCP tool to register a new app on the target environment. Save the returned `app_id` into `semoss_config/environments.json` under `envs.<name>.app_id` — the sync script and runtime config read it from there.
 
+Set `mcp=True` only if the user is building an MCP-enabled app (see "App type" near the top of this file). The platform stores that flag as the `MCP` tag on the project, which gates Elsa-chat exposure. For a standalone web app pass `mcp=False`.
+
 ```
 create_project(
   project_name="<name>",
   description="<desc>",
   project_type="CODE",
-  mcp=False  # True if exposing pages/reactors as MCP tools
+  mcp=False  # True only for MCP-enabled apps
 )
 ```
 
@@ -298,10 +324,30 @@ Once a web app is built and deployed, individual pages or backend reactors can b
 
 ### Enablement checklist
 
-1. **Tag the project as MCP-enabled.** Either pass `mcp=True` to `create_project` at creation time, or call `attach_tag(project_id, "MCP")` on an existing project.
+1. **Tag the project as MCP-enabled.** This is what makes any tool surface in Elsa chat at all. Two paths depending on where you are:
+   - **Creating a fresh project:** pass `mcp=True` to `create_project` (see the Build & Deploy section).
+   - **Converting an existing standalone project:** call `attach_tag(project_id="<app_id>", tag="MCP")` via the `Semoss_project_manager` MCP. See "Converting a standalone app to MCP" below for the full flow.
 2. **Declare your tools.** Add functions to `py/mcp_driver.py` (Python) or reactors under `java/src/reactors/` (Java).
-3. **Update the manifest.** Add or modify the tool's entry in `mcp/py_mcp.json` (Python) or `mcp/pixel_mcp.json` (Java). Edit the JSON directly — each entry just declares the name, input schema, description, and a bit of render metadata. The existing entries are working examples to copy from.
+3. **Update the manifest.**
+   - **Python tools:** add or modify the entry in `mcp/py_mcp.json`. This is required for any Python backend call from the frontend, so it's likely already populated.
+   - **Java reactors:** add an entry to `mcp/pixel_mcp.json` *only when exposing the reactor to Elsa chat*. App-internal Java calls don't need a manifest entry.
+
+   Edit the JSON directly — each entry declares the name, input schema, description, and a bit of render metadata. The existing entries are working examples to copy from.
 4. **Re-deploy.** Run the normal upload flow — `bulk-upload portals py java mcp` auto-publishes.
+
+### Converting a standalone app to MCP
+
+When the user has an existing standalone app and decides to expose its tools in Elsa chat:
+
+1. Call `Semoss_project_manager.attach_tag(project_id="<app_id>", tag="MCP")` to flip the tag. The project's `app_id` is already in `semoss_config/environments.json` from when it was created.
+
+2. Decide what to expose:
+   - **Python tools** are already declared in `mcp/py_mcp.json` (the manifest is required for any frontend call to Python), so they're ready to surface as soon as the tag is flipped — no further changes needed.
+   - **Java reactors**, by contrast, usually *aren't* in `mcp/pixel_mcp.json` for a standalone app, because frontend-internal calls don't need it. For each reactor the user wants exposed in chat, add an entry to `mcp/pixel_mcp.json`. Copy the structure of the included `GetWeather` entry.
+
+3. If new tools are being added as part of the conversion, implement them in `py/mcp_driver.py` (with `@mcp_metadata`) or as a Java reactor under `java/src/reactors/`, and add the matching manifest entry.
+
+4. Re-deploy via the normal sync-script flow.
 
 ### useInsight() and the tool context
 
@@ -476,4 +522,10 @@ Copy from `semoss_config/credentials.env.example`. Gitignored — never commit.
 
 ## Tagging
 
-Tag via the `Semoss_project_manager.attach_tag` MCP. The most important platform tag is `MCP` — it marks the app as MCP-enabled (alternatively, pass `mcp=True` to `create_project` to set this at creation). Other tags (`draft`, `approved`, etc.) are user-defined. Confirm with the user before applying.
+Tag via the `Semoss_project_manager.attach_tag` MCP. Confirm with the user before applying any tag.
+
+The `MCP` tag is the meaningful one — it's what makes the app surface in Elsa chat. Two ways to apply it:
+- At project creation, pass `mcp=True` to `create_project`.
+- For an existing project being converted from standalone to MCP, call `attach_tag(project_id="<app_id>", tag="MCP")`.
+
+Other tags (`draft`, `approved`, etc.) are user-defined and have no platform side effects — apply only when the user explicitly asks.
