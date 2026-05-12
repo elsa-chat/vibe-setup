@@ -1,14 +1,12 @@
-# MCP tools for this SEMOSS app.
+# MCP tools for this Elsa app.
 #
-# These are simple Python tools that can be exposed as MCP tools in the SEMOSS Playground.
-# When an MCP tool has no resourceURI, Playground auto-generates a basic form for it.
+# These are simple Python tools that can be exposed as MCP tools in Elsa chat.
+# When an MCP tool has no resourceURI, Elsa auto-generates a basic form for it.
 #
-# After adding or changing tools here, run MakePythonMCP(<project_id>) in the SEMOSS
-# Playground to regenerate mcp/py_mcp.json.
+# After adding or changing tools here, update mcp/py_mcp.json — either edit it by hand
+# or regenerate by running MakePythonMCP(<project_id>) in Elsa.
 #
 # The temperature converters below are TEMPLATE examples — replace them with your own tools.
-# The `echo` function at the bottom is a platform-recommended pattern; keep it if you want
-# UI-driven ("ask") tools to be able to hand context back to Playground.
 
 import json
 
@@ -39,16 +37,3 @@ def celsius_to_fahrenheit(temperature_c: float) -> str:
     """Convert a temperature from Celsius to Fahrenheit."""
     fahrenheit = temperature_c * 9 / 5 + 32
     return json.dumps({"celsius": temperature_c, "fahrenheit": round(fahrenheit, 2)})
-
-
-@mcp_metadata({"execution": "auto"})
-def echo(context):
-    """Return the accumulated context back to Playground unchanged.
-
-    Used by "ask" tools (custom-UI tools that need user interaction). After the user
-    is done in the custom UI, the frontend calls:
-        actions.runMCPTool('echo', { context: accumulatedContext })
-    to send the final assimilated context back to the Playground chat. The platform
-    docs recommend keeping this function in every MCP-enabled app.
-    """
-    return context

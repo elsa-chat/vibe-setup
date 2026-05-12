@@ -1,6 +1,6 @@
 {
 	"_meta": {
-		"note": "Auto-generated. Do not edit by hand. Regenerate via MakePythonMCP(<project_id>) in SEMOSS Playground."
+		"note": "Declares Python MCP tools exposed by this app. Edit by hand to add or modify entries, or regenerate from py/mcp_driver.py via MakePythonMCP(<project_id>) in Elsa."
 	},
 	"tools": [
 		{
@@ -50,26 +50,6 @@
 					"loadingMessage": "Converting temperature..."
 				},
 				"SMSS_FUNCTION_NAME": "celsius_to_fahrenheit"
-			},
-			"_type": "python"
-		},
-		{
-			"name": "echo",
-			"title": "Echo",
-			"description": "Return the accumulated context back to Playground unchanged.",
-			"inputSchema": {
-				"properties": {
-					"context": {
-						"title": "Context"
-					}
-				},
-				"required": ["context"],
-				"title": "Echo Arguments",
-				"type": "object"
-			},
-			"_meta": {
-				"SMSS_MCP_EXECUTION": "auto",
-				"SMSS_FUNCTION_NAME": "echo"
 			},
 			"_type": "python"
 		}

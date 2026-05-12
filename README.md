@@ -1,20 +1,25 @@
-# GovConnect.ai Vibe Coding Setup
+# Elsa Vibe Coding Setup
 
-A template for building GovConnect.ai web applications with Claude Code. **Clone this repo once per application** — each clone becomes an independent project.
+A template for building web apps on the Elsa Platform with Claude Code. The apps can optionally be exposed as MCP tools that show up in Elsa chat — same codebase, just additional metadata declaring which pieces are tools. **Clone this repo once per application** — each clone becomes an independent project.
 
 ## Architecture
 
 ```
 ┌──────────────────────────────────────────────────────────┐
 │  client/         React 18 SPA                            │
+│  py/             Python MCP tools (optional)             │
+│  java/           Java reactors (optional)                │
 ├──────────────────────────────────────────────────────────┤
-│  portals/        Build output (deployed to GovConnect.ai)│
+│  portals/        Built frontend (deployed to platform)   │
+│  mcp/            MCP tool manifests                      │
+│  classes/        Compiled Java (auto-generated)          │
 ├──────────────────────────────────────────────────────────┤
-│  GovConnect.ai Platform  (remote host, DB, LLM, SDK)     │
+│  Elsa Platform  (host, DB, LLM, Semoss SDK, Elsa chat)   │
 └──────────────────────────────────────────────────────────┘
 ```
 
-**Data flow:** Page → Hook → Service → `runPixel()` → GovConnect.ai SDK → Java Reactor → Database
+**Web app flow:** Page → Hook → Service → `actions.run()` → Semoss SDK → Reactor → Database
+**MCP tool flow:** Elsa chat → MCP tool → custom React UI (or auto-form) → `sendMCPResponseToPlayground()`
 
 ## Quick Start
 
@@ -38,14 +43,19 @@ A template for building GovConnect.ai web applications with Claude Code. **Clone
 
 | Path | Purpose |
 |------|---------|
-| `CLAUDE.md` | Claude Code instructions — scaffolding, conventions, full React workflow |
+| `CLAUDE.md` | Claude Code instructions — scaffolding, conventions, MCP patterns |
 | `.mcp.json.example` | MCP config template — copy to `.mcp.json` and add credentials |
 | `semoss_config/environments.json.example` | Environment config template — copy to `environments.json` and fill in your instance |
 | `semoss_config/credentials.env.example` | Credentials template — copy to `credentials.env` and fill in your keys |
 | `scripts/claude/` | Deploy script (`bulk-upload`, `delete`, `publish`) |
 | `docs/theme.md` | Color palette reference |
-| `client/` | React 18 SPA |
-| `portals/` | Build output (gitignored) — deployed to GovConnect.ai |
+| `client/` | React 18 SPA — web app pages and custom MCP tool UIs |
+| `py/mcp_driver.py` | Python MCP tools — `@mcp_metadata` decorated functions |
+| `java/src/reactors/` | Java reactors — extend `AbstractProjectReactor` |
+| `java/README.md` | Java reactor reference |
+| `mcp/` | MCP tool manifests (edit by hand or regenerate via `MakePythonMCP` / `MakePixelMCP` in Elsa) |
+| `pom.xml` | Maven build for Java reactors |
+| `portals/` | Build output (gitignored) — deployed to the Elsa Platform |
 
 ## Development
 
@@ -59,6 +69,20 @@ pnpm test:run   # Run tests
 ```
 
 Tech stack: React 18, TypeScript, Vite 8, Tailwind CSS v4, shadcn/ui, TanStack Query v5, React Router v7, Biome.
+
+## MCP Tools
+
+Exposing functionality as MCP tools is mostly a declaration step on top of code you already have.
+
+**Python tools** live in `py/mcp_driver.py`. Decorate any function with `@mcp_metadata({...})` and Elsa picks it up. Type hints become the input schema; the docstring becomes the description. Two examples ship in the template — replace them with your own.
+
+**Java tools** are reactors under `java/src/reactors/` that extend `AbstractProjectReactor`. The included `GetWeatherReactor` is a working example.
+
+**Declare your tools in the manifest.** Add or update entries in `mcp/py_mcp.json` (Python tools) or `mcp/pixel_mcp.json` (Java reactors), then redeploy. The manifests are hand-editable — each tool entry just lists the function name, input schema, description, and a bit of metadata about how Elsa should render it. If you'd rather regenerate from source, Elsa exposes `MakePythonMCP(<project_id>)` and `MakePixelMCP(reactor=["..."], mcpMetadata=[...])` reactors that do the derivation for you.
+
+Each tool can render with either Elsa's auto-generated form (simple input/output) or a custom React UI in `client/` (rich interaction). Custom UIs are wired by setting `resourceURI` in the manifest entry to a hash route (e.g. `/#/forecast`) and adding the matching route in `client/src/pages/Router.tsx`. See `client/src/components/ExampleComponent.tsx` for the full custom-UI pattern.
+
+Detailed patterns and rules (do/don't, `useInsight` hook, `sendMCPResponseToPlayground`, `tool.parameters`) are in `CLAUDE.md`.
 
 ## Deploy
 
@@ -97,7 +121,7 @@ git clone <repo-url> dashboard-app    # App 2
 
 Each clone maintains its own project ID, `client/` source, and git history.
 
-## GovConnect.ai URLs
+## Elsa URLs
 
 | Purpose | URL |
 |---------|-----|

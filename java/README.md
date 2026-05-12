@@ -1,6 +1,6 @@
 # Java Reactors
 
-Backend logic for SEMOSS apps. Reactors are Java classes that handle complex operations like database access, heavy computation, and LLM interactions. Optional — only needed when Python or pure-frontend logic isn't enough.
+Backend logic for Elsa apps. Reactors are Java classes that handle complex operations like database access, heavy computation, and LLM interactions. Optional — only needed when Python or pure-frontend logic isn't enough.
 
 ## Structure
 
@@ -30,17 +30,17 @@ See `GetWeatherReactor.java` for a working example.
 
 ## Compiling
 
-After making changes, click **"Recompile reactors"** in the SEMOSS UI editor. This compiles `.java` files into `classes/` (created automatically on the platform) and makes them available immediately.
+After making changes, click **"Recompile reactors"** in the Elsa UI editor. This compiles `.java` files into `classes/` (created automatically on the platform) and makes them available immediately.
 
-## Generating MCP Manifests
+## Declaring a Reactor as an MCP Tool
 
-To register a reactor as an MCP tool, run this Pixel command in the SEMOSS Playground:
+Add an entry for the reactor to `mcp/pixel_mcp.json`. The file is hand-editable — each entry lists the tool name, input schema, description, and a bit of render metadata. Drop the "Reactor" suffix from the tool name (e.g., `GetWeatherReactor` → `GetWeather`).
+
+As an alternative, you can regenerate the manifest from source by running this Pixel command in Elsa:
 
 ```
 MakePixelMCP(reactor=["ReactorName"], mcpMetadata=[...])
 ```
-
-Drop the "Reactor" suffix from class names (e.g., `GetWeatherReactor` → `GetWeather`).
 
 ## Calling from Frontend
 

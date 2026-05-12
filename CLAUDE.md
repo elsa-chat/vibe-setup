@@ -1,10 +1,19 @@
 # CLAUDE.md
 
-This project builds GovConnect.ai web applications. Prefer pragmatic, reviewable changes and keep outputs concise.
+This project builds Elsa web apps that can optionally be exposed as MCP tools. Prefer pragmatic, reviewable changes and keep outputs concise.
 
 ## Platform Naming
 
-GovConnect.ai, GovConnect, GCAI, and Semoss all refer to the same platform. Users may use any of these names — mirror their terminology in responses. Default to "GovConnect.ai" when no preference is shown.
+**Elsa** is the canonical name. There are two surfaces worth distinguishing in writing:
+
+- **Elsa Platform** — the hosting/infrastructure side. Apps live here, reactors run here, assets get deployed here.
+- **Elsa chat** (formerly "Playground") — the chat interface. MCP tools show up here as callable tools. Often just called "Elsa" when the context is clear.
+
+Some users will refer to the platform as GovConnect.ai, GovConnect, GCAI, AI Core, or Semoss — recognize all of these and treat them as synonyms. Some will still say "Playground" for the chat. Always say "Elsa" / "Elsa Platform" / "Elsa chat" yourself.
+
+Two exceptions where "Semoss" stays:
+- The **Semoss SDK** (`@semoss/sdk`) — the SDK keeps its name regardless of how the platform is referred to
+- File and identifier names like `semoss_config/`, `semoss_asset_sync.py`, `Semoss_Platform_Instructions`, `Semoss_project_manager`, `Semoss_database_helper`, `/SemossWeb`, `/Monolith` — these are technical identifiers that don't get renamed
 
 ## Key Files
 
@@ -13,22 +22,30 @@ GovConnect.ai, GovConnect, GCAI, and Semoss all refer to the same platform. User
 - `.mcp.json` — MCP server connections with inline Bearer tokens (gitignored, copy from `.mcp.json.example`)
 - `client/` — React app source (pnpm, Vite, TypeScript, Tailwind v4)
 - `client/vite.config.ts` — must have `base: './'` and `outDir: '../../portals'`
-- `portals/` — build output (gitignored), uploaded to GovConnect.ai
+- `client/src/components/ExampleComponent.tsx` — template MCP tool UI (replace with your own)
+- `client/src/pages/Router.tsx` — hash routes; each MCP tool's `resourceURI` maps to a path here
+- `py/mcp_driver.py` — Python MCP tools (`@mcp_metadata` decorator pattern)
+- `java/src/reactors/` — Java reactors (`AbstractProjectReactor` base, `GetWeatherReactor` example)
+- `java/project.properties` — config loaded by `ProjectProperties.java` (engine IDs, etc.)
+- `mcp/{py_mcp,pixel_mcp}.json` — MCP tool manifests; edit by hand to add or modify tool entries, or regenerate from source via `MakePythonMCP()` / `MakePixelMCP()` in Elsa
+- `pom.xml` — Maven config for the Java reactor build
+- `portals/` — build output (gitignored), uploaded to Elsa
+- `classes/`, `target/` — Java build artifacts (gitignored)
 - `scripts/claude/semoss_asset_sync.py` — deploy script
 - `docs/theme.md` — color palette reference
 
 ## Startup Checklist
 
-When the user wants to build or deploy a GovConnect.ai app, run these steps before proceeding. Getting platform instructions via MCP should happen before any app work — they provide up-to-date guidance that affects how you build. Always attempt this before starting.
+When the user wants to build or deploy an Elsa app, run these steps before proceeding. Getting platform instructions via MCP should happen before any app work — they provide up-to-date guidance that affects how you build. Always attempt this before starting.
 
-1. **Credentials** — if `.mcp.json` doesn't exist, copy it from `.mcp.json.example`. Then check for placeholder values. If found, ask the user for their GovConnect.ai access key and secret key, write them as `Authorization:Bearer <key>:<secret>`, then tell the user to restart Claude Code and **stop here** — MCP servers only load at startup, so nothing that requires platform access will work until they restart and you confirm connectivity in step 3.
+1. **Credentials** — if `.mcp.json` doesn't exist, copy it from `.mcp.json.example`. Then check for placeholder values. If found, ask the user for their Elsa access key and secret key, write them as `Authorization:Bearer <key>:<secret>`, then tell the user to restart Claude Code and **stop here** — MCP servers only load at startup, so nothing that requires platform access will work until they restart and you confirm connectivity in step 3.
 2. **Project config** — if `semoss_config/environments.json` doesn't exist, copy it from `semoss_config/environments.json.example` and ask the user to fill in their environment details. Check that `semoss_config/credentials.env` exists — if not, ask the user for their keys and create it from `semoss_config/credentials.env.example`.
 3. **MCP connectivity** — call `get_agent_platform_instructions` to verify the MCP servers are reachable. If it fails, ask the user whether they have platform access before continuing — the instructions it returns should inform your work. Only proceed without it if the user confirms they don't have access.
 4. **Client dir** — if `node_modules/` is missing from `client/`, run `cd client && pnpm install`.
 
 **Do not create databases, projects, or other platform resources unless the user explicitly asks.** The typical workflow is: build the app locally, then create + publish via the `Semoss_project_manager` MCP. Resource creation is a deliberate step, not a default.
 
-## GovConnect.ai Instance Config
+## Elsa Instance Config
 
 Set `base_url` to your instance's hostname. For `api_module_url` and `web_module_url`, look at your instance URL — if it contains a path prefix before `/Monolith` or `/SemossWeb`, include it. Examples:
 
@@ -48,16 +65,18 @@ React 18, TypeScript strict, Vite 8, Tailwind CSS v4 (via `@tailwindcss/vite`, n
 
 ## Backend Options
 
-The platform supports two backend approaches. Python (`py/mcp_driver.py`) is the default for most apps, but **Java reactors are fully supported** — use them when the user prefers Java, when performance matters, or when the logic fits better in a compiled reactor. Don't steer users away from Java.
+The platform supports two backend approaches; pick per use case rather than per app — many apps end up with both.
 
-- **Python** — logic in `py/mcp_driver.py`, called via `actions.runPy(...)` or exposed as MCP tools via `mcp/py_mcp.json`
-- **Java** — extend `AbstractReactor`, called from the FE via `actions.run('ReactorName(param=["value"])')`
+- **Python** (`py/mcp_driver.py`) — fastest for simple transforms, API calls, and quick prototypes. Functions decorated with `@mcp_metadata` become MCP tools; their type hints become the input schema. Called from the frontend via `actions.runPy(...)` for stateful execution, or via `actions.run('RunMCPTool(function=["<name>"], paramValues=[{...}])')` to invoke as an MCP tool. After adding or changing tools, update `mcp/py_mcp.json` (edit by hand or regenerate with `MakePythonMCP(<project_id>)` in Elsa).
+- **Java** (`java/src/reactors/`) — better for complex logic, DB access, heavy computation, or LLM calls. Extend `AbstractProjectReactor` (the project's base class — handles `preExecute`, error wrapping, and config loading). Called from the frontend via `actions.run('ReactorName(param=["value"])')` — note the `Reactor` suffix is stripped. After adding or changing reactors, update `mcp/pixel_mcp.json` (edit by hand or regenerate with `MakePixelMCP(reactor=["<Name>"], ...)`).
 
-## GovConnect.ai Platform Concepts
+Don't steer users away from Java. It's fully supported and often the right choice.
+
+## Elsa Platform Concepts
 
 ### Pixel
 
-GovConnect.ai's query language. Reactors are called as functions with array-wrapped params:
+Elsa's query language. Reactors are called as functions with array-wrapped params:
 ```
 ReactorName(param1=["value1"], param2=[2]);
 ```
@@ -69,7 +88,7 @@ The `Reactor` suffix is stripped when calling via Pixel: `ItemsCRUDReactor` → 
 
 ### Hash Routing
 
-Always use `createHashRouter` — GovConnect.ai embeds apps in iframes that don't support browser history. Never use `createBrowserRouter`.
+Always use `createHashRouter` — Elsa embeds apps in iframes that don't support browser history. Never use `createBrowserRouter`.
 
 ### Vite Config Requirements
 
@@ -167,6 +186,114 @@ publish_project(project_id="<app_id>")
 
 Publishing snapshots the uploaded assets into the public portal. It does **not** upload files — that must already be done.
 
+## Exposing the App as MCP Tools
+
+Once a web app is built and deployed, individual pages or backend reactors can be exposed as MCP tools that show up in Elsa chat. The conversion is small in scope: tag the project, declare the tools in the MCP manifest, redeploy. The app itself doesn't change — it just gains a second interface (Elsa chat) alongside the standalone portal view.
+
+### Enablement checklist
+
+1. **Tag the project as MCP-enabled.** Either pass `mcp=True` to `create_project` at creation time, or call `attach_tag(project_id, "MCP")` on an existing project.
+2. **Declare your tools.** Add functions to `py/mcp_driver.py` (Python) or reactors under `java/src/reactors/` (Java).
+3. **Update the manifest.** Add or modify the tool's entry in `mcp/py_mcp.json` (Python) or `mcp/pixel_mcp.json` (Java). Edit the JSON directly — each entry just declares the name, input schema, description, and a bit of render metadata. The `MakePythonMCP(<project_id>)` and `MakePixelMCP(reactor=["<Name>"], mcpMetadata=[...])` reactors are available as an alternative for regenerating from source.
+4. **Re-upload and publish.** Same flow as a normal deploy.
+
+### useInsight() and the tool context
+
+The primary SDK hook in any MCP-tool UI is `useInsight()` from `@semoss/sdk/react`. It exposes:
+
+- `actions.run(pixel)` — execute any Pixel command (reactors, queries, anything)
+- `actions.runPy(codeString)` — execute a Python snippet against the mounted `py/` module
+- `actions.sendMCPResponseToPlayground(response, status, executedParams)` — return a result to Elsa chat. Three arguments, not two. (The SDK method name still references "Playground" — that's a code identifier, don't rename it.)
+- `isInitialized` — true once the SDK has finished connecting. Gate rendering on this (see `InitializedLayout.tsx`)
+- `tool` — MCP invocation context, populated only when the component was launched from Elsa:
+  - `tool.parameters` — inputs the LLM passed in (use this, **not** `tool.inputs`)
+  - `tool.tool_response` — populated when viewing a past execution; restore prior result from here
+  - `tool.executedParameters` — the actual params that ran, source of truth for past executions
+
+`ExampleComponent.tsx` shows the full lifecycle: prefill from `tool.parameters`, call a reactor with `actions.run()`, hand the result back via `sendMCPResponseToPlayground()`, and restore past results from `tool.tool_response`. Keep that file (or a copy of it) around as the reference until trainees have the pattern memorized.
+
+### Default UI vs custom UI
+
+Each MCP tool either uses Elsa's auto-generated form or a custom React UI in `client/`. The decision lives in the `resourceURI` field of the tool's MCP metadata:
+
+| `resourceURI` | What renders | When to use |
+|---|---|---|
+| Omitted or null | Elsa auto-generates a form from the input schema | Simple input → output transforms (e.g. the temperature converters in `py/mcp_driver.py`) |
+| `/#/` or `/#/some-path` | The React route at that path in `Router.tsx` | Rich UI, multi-step flows, visualizations, anything beyond a single form |
+
+The path must use the hash router (`/#/...`) because Elsa embeds apps in iframes. If `resourceURI` points to a path that doesn't exist in `Router.tsx`, the catch-all redirects to `/` — the tool will look like it worked but render the wrong UI.
+
+**When adding a custom-UI tool, always do both steps in the same change:**
+1. Add the route in `client/src/pages/Router.tsx` (e.g. `{ path: '/forecast', Component: ForecastPage }`)
+2. Set `resourceURI` in the `MakePixelMCP()` / `@mcp_metadata` call to match (e.g. `"resourceURI": "/#/forecast"`)
+
+If two tools point to the same `resourceURI`, the same component renders for both — the UI has to inspect `tool.parameters` to figure out which tool invoked it. Usually you want one route per tool.
+
+### Execution modes
+
+`SMSS_MCP_EXECUTION` controls how Elsa runs the tool:
+
+- `"auto"` — Elsa executes the tool directly without user interaction. Best for fast, side-effect-free transforms.
+- `"ask"` — Elsa opens the custom UI so the user can review, edit, or supply input before continuing. Use this when human review matters or the tool needs UI-driven data entry.
+- `"disabled"` — declared but not callable. Useful for staging a tool.
+
+### Returning a result to Elsa
+
+For `ask` tools, the custom UI gathers data and at the end needs to hand a final payload back to Elsa chat. Use `actions.sendMCPResponseToPlayground(payload, "success", executedParams)` — it's tied to the current tool invocation, which is exactly what you want. `ExampleComponent.tsx` shows the pattern in context.
+
+### Calling tools from the frontend
+
+Everything goes through `actions.run()` — Java reactors, Python tools, queries, anything Pixel. A few patterns worth knowing:
+
+- **Java reactor:** `` actions.run(`YourTool(param=${JSON.stringify(value)})`) `` — drop the `Reactor` suffix. Use backticks; `${}` interpolation doesn't work in single-quoted strings
+- **Python MCP tool:** `actions.run('RunMCPTool(function=["tool_name"], paramValues=[{"param": "value"}])')` — `RunMCPTool` is a Pixel reactor that dispatches to the Python tool
+- **Escape every param** with `JSON.stringify()` to avoid breaking on quotes or special characters
+- **Check for errors:** `pixelReturn[0].operationType.includes("ERROR")`
+
+The SDK also exposes a method `actions.runMCPTool(name, params)` (camelCase). It calls a Python tool **and** auto-sends the response to Elsa, which is usually not what you want — for normal tool invocation, prefer `actions.run('RunMCPTool(...)')` so you control when the response is sent.
+
+### Java reactor rules
+
+- Extend `AbstractProjectReactor`, not `AbstractReactor` directly — the project base class handles `preExecute` and error wrapping
+- `organizeKeys()` is called automatically by `preExecute()`. Never call it again in `doExecute()`
+- Define params via `keysToGet` and `keyRequired` arrays (`1` = required, `0` = optional)
+- Return success via `new NounMetadata(value, PixelDataType.X)`; return errors via `NounMetadata.getErrorNounMessage(...)`
+- Implement `getReactorDescription()` and `getDescriptionForKey()` — these feed the MCP manifest
+- `IModelEngine.ask()` returns a response object. Use reflection to call `.getResponse()`; never `toString()` it
+- Resolve a model engine by ID with `prerna.util.Utility.getModel(modelId)` — returns null if not found
+- For file paths within the project, use `this.insight.getInsightFolder()`
+
+### Python MCP tool rules
+
+- Define tools in `py/mcp_driver.py` — that's the entry point Elsa expects
+- Every tool needs the `@mcp_metadata` decorator (from `smssutil`, auto-injected): `@mcp_metadata({"execution": "auto"})`
+- Type hints on every parameter — they become the MCP input schema and are required
+- The tool's title comes from the function name; the description from the docstring
+- Return JSON strings from tools
+- Omit `resourceURI` for Elsa's default auto-generated form; include it (e.g. `"resourceURI": "/#/"`) to point at a React route
+- `ROOT` is injected by Elsa for file path access
+- For LLM calls, use `ModelEngine` from `ai_server` and always accept `model_id` as a parameter
+
+### React UI rules
+
+- Use `tool.parameters` for prefilled inputs (never `tool.inputs`)
+- Use `tool.tool_response` / `tool.executedParameters` to restore the UI when viewing a past execution
+- Handle responses that may be objects, strings, or double-encoded strings
+- Fetch available models with `actions.run('MyEngines(metaKeys=[], metaFilters=[{"tag":"text-generation"}], engineTypes=["MODEL"])')`
+- Call `sendMCPResponseToPlayground()` directly; don't wrap it — the SDK handles the tool-name match
+- Gate rendering on `isInitialized` (see `InitializedLayout.tsx`)
+
+### Don't
+
+- Edit `portals/`, `classes/`, or `target/` directly — these are auto-generated build outputs
+- Use the SDK method `actions.runMCPTool()` — it auto-sends to Elsa, which is usually unintended. Call `actions.run('RunMCPTool(...)')` instead
+- Call `toString()` on `IModelEngine` responses in Java
+- Read `tool.inputs` in React — it's `tool.parameters`
+- Commit secrets to `.env.local` or `.env`
+- Call `organizeKeys()` inside `doExecute()` (it's already been called)
+- Forget `@mcp_metadata` on Python tools or `getDescriptionForKey()` / `getReactorDescription()` on Java reactors
+- Include the `Reactor` suffix when calling reactors in Pixel
+
 ## Multi-Environment Workflow
 
 The agent handles all environment switching. Users just name the target.
@@ -199,7 +326,7 @@ The agent handles all environment switching. Users just name the target.
 
 `app_id` — the identifier for the app/project on this environment. Set after calling `Semoss_project_manager.create_project`. Different environments will have different `app_id` values for the same logical app.
 
-**Note:** "app" and "project" are synonyms on the GovConnect.ai platform. The CLI, backend, and deploy script use both terms interchangeably — they refer to the same thing. `app_id` is the canonical field name here.
+**Note:** "app" and "project" are synonyms on Elsa. The CLI, backend, and deploy script use both terms interchangeably — they refer to the same thing. `app_id` is the canonical field name here.
 
 Add more envs by adding entries under `envs` — name them anything (`dev`, `preprod`, `prod`, `workshop`, etc.).
 
