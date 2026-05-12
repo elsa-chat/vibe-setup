@@ -18,6 +18,9 @@ portals/
 classes/
 target/
 
+# Manual-UI upload bundle (created on demand by the agent for the no-Python flow)
+/elsa-bundle.zip
+
 # Environment files (credentials — never commit)
 *.local
 

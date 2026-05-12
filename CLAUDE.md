@@ -114,6 +114,21 @@ Local-only commands (`pnpm build`, `pnpm dev`, `pnpm fix`) don't make outbound H
 python scripts/claude/semoss_asset_sync.py --env <name> --no-verify-ssl bulk-upload portals py java mcp
 ```
 
+**MCP-side fix** (for the platform MCP servers in `.mcp.json`): each server runs `npx -y mcp-remote ...` which does TLS twice — once to fetch `mcp-remote` from npm, once to connect to the Elsa instance. Both fail behind a MITM proxy, with the symptom usually being "MCP tools just don't show up" rather than a loud error. The fix is to set the env var inside each MCP server entry's `env` field:
+
+```json
+"Semoss_Platform_Instructions": {
+  "type": "stdio",
+  "command": "npx",
+  "args": [...],
+  "env": {
+    "NODE_TLS_REJECT_UNAUTHORIZED": "0"
+  }
+}
+```
+
+`.mcp.json.example` already includes this for all three Semoss servers, so copying it as-is to `.mcp.json` works out of the box for corp-laptop trainees. If a trainee on a clean network wants to drop the workaround, they can delete the `env` field — but it's harmless to leave it.
+
 Don't ignore the TLS error or get stuck retrying — these are setup issues, not platform bugs.
 
 ## Backend Options
@@ -242,7 +257,17 @@ python scripts/claude/semoss_asset_sync.py --env <name> delete <remote/path> --y
 
 ### Upload assets (manual UI alternative — no Python required)
 
-If Python isn't available, replace step 4 with a drag-and-drop in the Elsa UI editor. Open this URL in a browser, where `<app_id>` is the project's `app_id` from `environments.json`:
+If Python isn't available, replace step 4 with a manual upload through the Elsa UI editor. The editor **only accepts zip files** (not raw folders), so the agent should bundle the asset directories into a single zip first, then have the user drag that zip in.
+
+**1. Bundle the assets.** From the project root, use `tar` (built into macOS and Windows 10+):
+
+```bash
+tar -a -c -f elsa-bundle.zip portals py java mcp
+```
+
+The `-a` flag tells tar to pick the archive format from the file extension (so `.zip` produces a zip). This single command works on both macOS and Windows. On Linux the GNU `tar` doesn't speak zip — use `zip -r elsa-bundle.zip portals py java mcp` instead. Skip any directories the project doesn't have.
+
+**2. Open the editor** in a browser, where `<app_id>` is the project's `app_id` from `environments.json`:
 
 ```
 <base_url><web_module_url>/packages/client/dist/#/app/<app_id>/edit
@@ -250,14 +275,9 @@ If Python isn't available, replace step 4 with a drag-and-drop in the Elsa UI ed
 
 Example: `http://localhost:9090/SemossWeb/packages/client/dist/#/app/<app_id>/edit`
 
-Drag these directories from the local repo into the editor:
+**3. Drag `elsa-bundle.zip` into the editor and check the "unzip" checkbox.** The unzip option tells Elsa to extract the archive on upload and place the contents at the right paths under `version/assets/`. Without it, the zip just sits in the project as a literal file.
 
-- `portals/` — built frontend (always required)
-- `py/` — Python tools (only if the app exposes Python MCP tools)
-- `java/` — Java reactors (only if the app has Java reactors)
-- `mcp/` — MCP tool manifests (only if the app exposes MCP tools)
-
-Then click **"Compile and publish the app"** in the editor. This button does both jobs in one step — compiles any Java sources you uploaded and publishes the project so the new assets become visible.
+**4. Click "Compile and publish the app"** in the editor. This compiles any Java sources you uploaded and publishes the project in one step.
 
 ## Exposing the App as MCP Tools
 
