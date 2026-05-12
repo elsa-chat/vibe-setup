@@ -62,13 +62,17 @@ Tech stack: React 18, TypeScript, Vite 8, Tailwind CSS v4, shadcn/ui, TanStack Q
 
 ## Deploy
 
+Deploy = build → upload → publish.
+
 ```bash
 cd client && pnpm build && cd ..
 python scripts/claude/semoss_asset_sync.py --env <name> delete portals/assets --yes
 python scripts/claude/semoss_asset_sync.py --env <name> bulk-upload portals
 ```
 
-`<name>` matches an entry in `semoss_config/environments.json` (e.g. `dev`, `prod`).
+Then, via the `Semoss_project_manager` MCP, call `publish_project(project_id="<app_id>")` to snapshot the uploaded assets to the public portal.
+
+`<name>` matches an entry in `semoss_config/environments.json` (e.g. `dev`, `prod`). First-time apps are created with `Semoss_project_manager.create_project` — save the returned `app_id` into `environments.json`.
 
 ## Credentials
 

@@ -26,7 +26,7 @@ When the user wants to build or deploy a GovConnect.ai app, run these steps befo
 3. **MCP connectivity** — call `get_agent_platform_instructions` to verify the MCP servers are reachable. If it fails, ask the user whether they have platform access before continuing — the instructions it returns should inform your work. Only proceed without it if the user confirms they don't have access.
 4. **Client dir** — if `node_modules/` is missing from `client/`, run `cd client && pnpm install`.
 
-**Do not create databases, projects, or other platform resources unless the user explicitly asks.** The typical workflow is: build the app locally, then submit via `ai-repo`. Resource creation is a deliberate step, not a default.
+**Do not create databases, projects, or other platform resources unless the user explicitly asks.** The typical workflow is: build the app locally, then create + publish via the `Semoss_project_manager` MCP. Resource creation is a deliberate step, not a default.
 
 ## GovConnect.ai Instance Config
 
@@ -96,16 +96,34 @@ Schemas from `get_schema()` are Base64-encoded — decode before use. Write deco
 
 ## Build & Deploy
 
-There are two deployment methods:
+Deploy = build locally → upload assets → publish on the platform.
 
-| Method | What it does | When to use |
+| Step | Tool | Notes |
 |---|---|---|
-| **Deploy script** (`semoss_asset_sync.py`) | Directly uploads assets to a running instance | Dev, preprod, or any env you have direct credentials for |
-| **ai-repo** (`ai-repo publish`) | Submits a zip into a review/approval pipeline | When going through a formal review process |
+| **Create the app** | `Semoss_project_manager.create_project` MCP | Once per app, per environment. Returns the `app_id` — save it to `environments.json` |
+| **Upload assets** | `scripts/claude/semoss_asset_sync.py` (Python) | Reads `app_id` from `environments.json`. Python 3.10+ required |
+| **Publish** | `Semoss_project_manager.publish_project` MCP | Snapshots uploaded assets to the public portal — files must already be uploaded |
 
-Both methods can target any environment — the distinction is governance, not environment.
+The platform itself recommends `semoss_asset_sync.py` for asset transfer (per `get_agent_platform_instructions`). There is no upload tool exposed via the MCPs — only project lifecycle (create/publish/delete/tag) and file listing/deletion.
 
-### Before any build — write `client/.env.local`
+### 1. Create the app on the platform (first time only)
+
+Use the `Semoss_project_manager.create_project` MCP tool to register a new app on the target environment. Save the returned `app_id` into `semoss_config/environments.json` under `envs.<name>.app_id` — the sync script and runtime config read it from there.
+
+```
+create_project(
+  project_name="<name>",
+  description="<desc>",
+  project_type="CODE",
+  mcp=False  # True if exposing pages/reactors as MCP tools
+)
+```
+
+The tool returns a JSON string with `status`, `project_id`, and `project_name`. Parse out `project_id` — that's the `app_id`.
+
+If the same project name already exists on the platform, `create_project` returns a hard error. Use `search_project` first if uncertain.
+
+### 2. Before any build — write `client/.env.local`
 
 Write the target environment's values to `client/.env.local`:
 ```
@@ -114,17 +132,17 @@ ENDPOINT=<envs.<name>.base_url>
 MODULE=<envs.<name>.api_module_url>
 ```
 
-### Build
+### 3. Build
+
 ```bash
 cd client && pnpm build
 ```
 
-### Live deploy (sync script)
+### 4. Upload assets (sync script)
 
 The `--env` flag tells the script which entry to read from `semoss_config/environments.json` and `semoss_config/credentials.env`.
 
 ```bash
-cd client && pnpm build && cd ..
 python scripts/claude/semoss_asset_sync.py --env <name> delete portals/assets --yes
 python scripts/claude/semoss_asset_sync.py --env <name> bulk-upload portals
 ```
@@ -139,43 +157,15 @@ python scripts/claude/semoss_asset_sync.py --env <name> bulk-upload portals
 python scripts/claude/semoss_asset_sync.py --env <name> --no-verify-ssl bulk-upload portals
 ```
 
-### Submit for review (ai-repo)
+### 5. Publish
 
-`ai-repo` submits a zip into an approval pipeline — it does **not** publish the app to users. After approval, an admin deploys server-side via `RepositoryDeployApp`, which auto-creates the SEMOSS project on the target instance.
+After uploading, publish so the assets become visible to users:
 
-**Important:** `APP` in `client/.env.local` must be set to the `app_id` for the target environment before building. The deploy reactor synthesizes the `.smss` with `PROJECT={app_id}`, so any embedded refs need to match.
-
-```bash
-# First time: register the app on the target environment
-ai-repo login --base-url <base_url>/Monolith --access-key <key> --secret-key <key>
-ai-repo create-app --name "<name>" --business-unit "<team>" --description "<desc>"
-# Save the returned app_id to environments.json under envs.<name>.app_id
-
-# Build targeting the submission environment, then submit
-cd client && pnpm build && cd ..
-ai-repo publish --app <app_id> --notes "<notes>"
-
-# Check status
-ai-repo status --app <app_id>
+```
+publish_project(project_id="<app_id>")
 ```
 
-`publish` runs from the project root and handles zipping automatically. It includes `client`, `java`, `portals`, `py`, and `mcp` by default. Use `--include <dirs>` for extra paths or `--dry-run` to preview contents without uploading.
-
-**`ai-repo` not found?** It lives in pnpm's bin directory. Prefix the failing command with `PATH="$HOME/Library/pnpm:$PATH"` to fix it.
-
-After all reviews pass (Initial → Security → Final, all approved), an admin runs the deploy reactor directly via Pixel:
-```
-RepositoryDeployApp(appId="<app_id>", versionId="<version_id>")
-```
-On first deploy, SEMOSS auto-registers the project under `app_id` and grants OWNER access to the deployer + READ_ONLY access to the version's submitter.
-
-`ai-repo` is usually already logged in. Only run `ai-repo login` if you get an auth error. Credentials come from `semoss_config/credentials.env`.
-
-**Self-signed SSL certificates (preprod):** Prefix `ai-repo` commands with `NODE_TLS_REJECT_UNAUTHORIZED=0`:
-```bash
-NODE_TLS_REJECT_UNAUTHORIZED=0 ai-repo create-app --name "..." --business-unit "..." --description "..."
-NODE_TLS_REJECT_UNAUTHORIZED=0 ai-repo publish --app <app_id> --notes "..."
-```
+Publishing snapshots the uploaded assets into the public portal. It does **not** upload files — that must already be done.
 
 ## Multi-Environment Workflow
 
@@ -185,16 +175,9 @@ The agent handles all environment switching. Users just name the target.
 1. Read `semoss_config/environments.json` → `envs.<env>`: `base_url`, `api_module_url`, `app_id`
 2. Write `client/.env.local`: `APP=<app_id>`, `ENDPOINT=<base_url>`, `MODULE=<api_module_url>`
 3. `cd client && pnpm build && cd ..`
-4. `python scripts/claude/semoss_asset_sync.py --env <env> delete portals/assets --yes`
+4. `python scripts/claude/semoss_asset_sync.py --env <env> delete portals/assets --yes` (skip on first deploy)
 5. `python scripts/claude/semoss_asset_sync.py --env <env> bulk-upload portals`
-
-### "Submit for review on `<env>`"
-1. Read `semoss_config/environments.json` → `envs.<env>`: `base_url`, `api_module_url`, `app_id`
-2. Read `semoss_config/credentials.env` → `<ENV>_ACCESS_KEY`, `<ENV>_SECRET_KEY`
-3. Write `client/.env.local`: `APP=<app_id>`, `ENDPOINT=<base_url>`, `MODULE=<api_module_url>`
-4. `cd client && pnpm build && cd ..`
-5. `ai-repo login --base-url <base_url>/Monolith --access-key <key> --secret-key <key>`
-6. `ai-repo publish --app <app_id> --notes "<notes>"`
+6. Call `publish_project(project_id="<app_id>")` via the `Semoss_project_manager` MCP
 
 ## semoss_config/environments.json Shape
 
@@ -214,7 +197,7 @@ The agent handles all environment switching. Users just name the target.
 }
 ```
 
-`app_id` — the identifier for the app/project on this environment. Set after running `ai-repo create-app`. Different environments will have different `app_id` values for the same logical app.
+`app_id` — the identifier for the app/project on this environment. Set after calling `Semoss_project_manager.create_project`. Different environments will have different `app_id` values for the same logical app.
 
 **Note:** "app" and "project" are synonyms on the GovConnect.ai platform. The CLI, backend, and deploy script use both terms interchangeably — they refer to the same thing. `app_id` is the canonical field name here.
 
@@ -238,14 +221,14 @@ Copy from `semoss_config/credentials.env.example`. Gitignored — never commit.
 | Server | Purpose |
 |--------|---------|
 | `Semoss_Platform_Instructions` | Platform docs and guidance |
-| `Semoss_project_manager` | Create projects, upload files, publish |
+| `Semoss_project_manager` | Create/delete projects, list/delete files, publish, tag |
 | `Semoss_database_helper` | Create/query databases, get schema |
 
 ### MCP Quirks
 
-- **`create_project` always reports an error string** — even on success, the tool returns `"Could not determine project_id"`. The real project data (including the app/project ID) is embedded in that message; parse it rather than treating it as a failure.
-- **Project names must be unique** — `create_project` returns a hard error if the name already exists on the platform. Pick a unique name or check first.
+- **Project names must be unique** — `create_project` returns a hard error if the name already exists on the platform. Pick a unique name or check first with `search_project`.
 - **Update `environments.json` before running the sync script** — `semoss_asset_sync.py` reads `app_id` from the target env's entry. When creating a new project, save the new `app_id` into `environments.json` before running the deploy, or files will go to the wrong project.
+- **Publish ≠ upload** — `publish_project` snapshots assets that are already uploaded. Always run `bulk-upload` first, then `publish_project`.
 
 ## URL Patterns
 
@@ -256,4 +239,4 @@ Copy from `semoss_config/credentials.env.example`. Gitignored — never commit.
 
 ## Tagging
 
-After publishing, tag via MCP: `attach_tag(app_id, tag)`. Common tags: `approval-pending`, `approved`, `draft`, `deprecated`. Confirm with the user before applying.
+Tag via the `Semoss_project_manager.attach_tag` MCP. The most important platform tag is `MCP` — it marks the app as MCP-enabled (alternatively, pass `mcp=True` to `create_project` to set this at creation). Other tags (`draft`, `approved`, etc.) are user-defined. Confirm with the user before applying.
