@@ -35,7 +35,7 @@ A template for building web apps on the Elsa Platform with Claude Code. The apps
 | Tool | Version | Install |
 |------|---------|---------|
 | Node.js | 20.19+ | [nodejs.org](https://nodejs.org) or `brew install node` |
-| pnpm | 10.x | `corepack enable && corepack prepare pnpm@latest --activate` |
+| pnpm | 10.x | `corepack enable && corepack prepare pnpm@latest --activate` (recommended; npm works too — see Development) |
 | Python | 3.10+ | Pre-installed on most systems. Only needed for the deploy script — see the no-Python path under Deploy |
 | Claude Code | latest | [claude.ai/code](https://claude.ai/code) |
 
@@ -61,12 +61,14 @@ A template for building web apps on the Elsa Platform with Claude Code. The apps
 
 ```bash
 cd client
-pnpm install        # Install dependencies (pnpm only)
+pnpm install    # Install dependencies
 pnpm dev        # Dev server with HMR
 pnpm build      # Type-check + build to portals/
 pnpm fix        # Lint & format (Biome)
 pnpm test:run   # Run tests
 ```
+
+pnpm is recommended (the lockfile in `client/` is `pnpm-lock.yaml`). If you don't have pnpm and don't want to install it, npm works — just translate the commands (`npm install`, `npm run dev`, `npm run build`, etc.).
 
 Tech stack: React 18, TypeScript, Vite 8, Tailwind CSS v4, shadcn/ui, TanStack Query v5, React Router v7, Biome.
 

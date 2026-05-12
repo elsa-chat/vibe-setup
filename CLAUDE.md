@@ -41,7 +41,7 @@ When the user wants to build or deploy an Elsa app, run these steps before proce
 1. **Credentials** — if `.mcp.json` doesn't exist, copy it from `.mcp.json.example`. Then check for placeholder values. If found, ask the user for their Elsa access key and secret key, write them as `Authorization:Bearer <key>:<secret>`, then tell the user to restart Claude Code and **stop here** — MCP servers only load at startup, so nothing that requires platform access will work until they restart and you confirm connectivity in step 3.
 2. **Project config** — if `semoss_config/environments.json` doesn't exist, copy it from `semoss_config/environments.json.example` and ask the user to fill in their environment details. Check that `semoss_config/credentials.env` exists — if not, ask the user for their keys and create it from `semoss_config/credentials.env.example`.
 3. **MCP connectivity** — call `get_agent_platform_instructions` to verify the MCP servers are reachable. If it fails, ask the user whether they have platform access before continuing — the instructions it returns should inform your work. Only proceed without it if the user confirms they don't have access.
-4. **Client dir** — if `node_modules/` is missing from `client/`, run `cd client && pnpm install`.
+4. **Client dir** — if `node_modules/` is missing from `client/`, install dependencies. Prefer pnpm (see Tech Stack section for the package manager policy); fall back to npm if the user doesn't want to install pnpm.
 
 **Do not create databases, projects, or other platform resources unless the user explicitly asks.** The typical workflow is: build the app locally, then create + publish via the `Semoss_project_manager` MCP. Resource creation is a deliberate step, not a default.
 
@@ -61,7 +61,31 @@ Update `semoss_config/environments.json` and `.mcp.json` when configuring a new 
 
 React 18, TypeScript strict, Vite 8, Tailwind CSS v4 (via `@tailwindcss/vite`, not PostCSS), shadcn/ui (Base UI, `--base base`), TanStack Query v5, React Router v7, Vitest, Biome, pnpm 10.
 
-**Never use npm or yarn — pnpm only.**
+### Package manager
+
+Prefer **pnpm 10**. If the user doesn't have it installed, follow this fallback chain:
+
+1. **First try corepack** (ships with Node, modern recommended path):
+   ```bash
+   corepack enable && corepack prepare pnpm@latest --activate
+   ```
+2. **If corepack fails with `EPERM` (Windows, admin-installed Node) or `EACCES` (Linux/macOS, system Node)**, try a user-scope global install via npm:
+   ```bash
+   npm install -g pnpm@latest
+   ```
+   This writes to npm's user prefix (e.g. `%APPDATA%\npm` on Windows, or wherever `npm prefix -g` points), which is usually writable without elevation.
+3. **If that also fails, or the user just doesn't want to install pnpm**, fall back to using **npm** directly. Don't ask the user to elevate or run as admin.
+
+When falling back to **npm**, translate commands as needed:
+
+| pnpm | npm equivalent |
+|---|---|
+| `pnpm install` | `npm install` |
+| `pnpm dev` | `npm run dev` |
+| `pnpm build` | `npm run build` |
+| `pnpm fix` | `npm run fix` |
+
+Avoid **yarn** regardless — the lockfiles in this template are pnpm-flavored, and yarn would just produce a third lockfile for no reason.
 
 ## Backend Options
 
