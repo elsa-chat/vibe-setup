@@ -1,0 +1,29 @@
+{
+	"_meta": {
+		"note": "Declares Java reactor MCP tools exposed by this app. Edit directly when adding or changing tools — each entry mirrors a reactor under java/src/reactors/ (drop the 'Reactor' suffix from the class name)."
+	},
+	"tools": [
+		{
+			"name": "GetWeather",
+			"title": "GetWeather",
+			"description": "Get the weather forecast for a city.",
+			"inputSchema": {
+				"type": "object",
+				"title": "GetWeather_Arguments",
+				"properties": {
+					"city": {
+						"description": "The city to get the weather forecast for.",
+						"title": "city",
+						"type": "string"
+					}
+				},
+				"required": ["city"]
+			},
+			"_meta": {
+				"SMSS_MCP_UI": { "resourceURI": "/#/" },
+				"SMSS_FUNCTION_NAME": "GetWeather",
+				"SMSS_MCP_EXECUTION": "ask"
+			}
+		}
+	]
+}

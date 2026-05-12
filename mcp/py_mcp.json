@@ -1,0 +1,57 @@
+{
+	"_meta": {
+		"note": "Declares Python MCP tools exposed by this app. Edit directly when adding or changing tools — each entry mirrors the corresponding function in py/mcp_driver.py."
+	},
+	"tools": [
+		{
+			"name": "fahrenheit_to_celsius",
+			"title": "Fahrenheit To Celsius",
+			"description": "Convert a temperature from Fahrenheit to Celsius.",
+			"inputSchema": {
+				"properties": {
+					"temperature_f": {
+						"title": "Temperature F",
+						"type": "number"
+					}
+				},
+				"required": ["temperature_f"],
+				"title": "Fahrenheit To Celsius Arguments",
+				"type": "object"
+			},
+			"_meta": {
+				"SMSS_MCP_EXECUTION": "auto",
+				"SMSS_MCP_UI": {
+					"displayLocation": "inline",
+					"loadingMessage": "Converting temperature..."
+				},
+				"SMSS_FUNCTION_NAME": "fahrenheit_to_celsius"
+			},
+			"_type": "python"
+		},
+		{
+			"name": "celsius_to_fahrenheit",
+			"title": "Celsius To Fahrenheit",
+			"description": "Convert a temperature from Celsius to Fahrenheit.",
+			"inputSchema": {
+				"properties": {
+					"temperature_c": {
+						"title": "Temperature C",
+						"type": "number"
+					}
+				},
+				"required": ["temperature_c"],
+				"title": "Celsius To Fahrenheit Arguments",
+				"type": "object"
+			},
+			"_meta": {
+				"SMSS_MCP_EXECUTION": "auto",
+				"SMSS_MCP_UI": {
+					"displayLocation": "inline",
+					"loadingMessage": "Converting temperature..."
+				},
+				"SMSS_FUNCTION_NAME": "celsius_to_fahrenheit"
+			},
+			"_type": "python"
+		}
+	]
+}
