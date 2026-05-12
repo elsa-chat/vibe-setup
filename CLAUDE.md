@@ -120,6 +120,8 @@ When falling back to **npm**, translate commands as needed:
 
 Avoid **yarn** regardless — the lockfiles in this template are pnpm-flavored, and yarn would just produce a third lockfile for no reason.
 
+**pnpm 10 blocks dependency build scripts by default.** `pnpm install` finishes with a `ERR_PNPM_IGNORED_BUILDS` warning when a dependency has a postinstall/build step — most notably `esbuild`, a Vite dependency. Run `pnpm approve-builds` and select `esbuild` in the interactive picker (space to toggle, enter to confirm); pnpm writes the approval to local config so future installs don't re-prompt. Skipping this can cause Vite to fail at dev/build time when it tries to load the unbuilt esbuild binary.
+
 ## Corporate proxies and self-signed certs
 
 Most trainees are on managed laptops (Deloitte, FDA, DHA, etc.) where outbound HTTPS is intercepted by a corporate MITM proxy that re-signs traffic with a corporate CA. Node and Python don't trust that CA by default, so commands that make HTTPS calls fail with TLS errors. The Elsa instance itself may also be on a self-signed cert in preprod.
@@ -364,7 +366,7 @@ The primary SDK hook in any MCP-tool UI is `useInsight()` from `@semoss/sdk/reac
 
 - `actions.run(pixel)` — execute any Pixel command (reactors, queries, anything)
 - `actions.runPy(codeString)` — execute a Python snippet against the mounted `py/` module
-- `actions.sendMCPResponseToPlayground(response, status, executedParams)` — return a result to Elsa chat. Three arguments, not two. (The SDK method name still references "Playground" — that's a code identifier, don't rename it.)
+- `actions.sendMCPResponseToPlayground(response, status, executedParams)` — return a result to Elsa chat. `response` must be a string; stringify objects yourself (`JSON.stringify(obj)`) before passing them. `status` is `"success"` for normal completions or `"error"` to surface a failure. Three arguments, not two. (The SDK method name still references "Playground" — that's a code identifier, don't rename it.)
 - `isInitialized` — true once the SDK has finished connecting. Gate rendering on this (see `InitializedLayout.tsx`)
 - `tool` — MCP invocation context, populated only when the component was launched from Elsa:
   - `tool.parameters` — inputs the LLM passed in (use this, **not** `tool.inputs`)
@@ -436,7 +438,7 @@ If two tools point to the same `resourceURI`, the same component renders for bot
 
 ### Returning a result to Elsa
 
-For `ask` tools, the custom UI gathers data and at the end needs to hand a final payload back to Elsa chat. Use `actions.sendMCPResponseToPlayground(payload, "success", executedParams)` — it's tied to the current tool invocation, which is exactly what you want. `ExampleComponent.tsx` shows the pattern in context.
+For `ask` tools, the custom UI gathers data and at the end needs to hand a final payload back to Elsa chat. Use `actions.sendMCPResponseToPlayground(payload, status, executedParams)` — it's tied to the current tool invocation, which is exactly what you want. `payload` must be a string; stringify structured data yourself before passing it. `status` is `"success"` for normal completions or `"error"` to surface a failure. `ExampleComponent.tsx` shows the pattern in context.
 
 ### Calling tools from the frontend
 
