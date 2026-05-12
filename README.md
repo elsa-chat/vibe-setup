@@ -70,6 +70,8 @@ pnpm test:run   # Run tests
 
 pnpm is recommended (the lockfile in `client/` is `pnpm-lock.yaml`). If you don't have pnpm and don't want to install it, npm works — just translate the commands (`npm install`, `npm run dev`, `npm run build`, etc.).
 
+**On a corporate or government-issued laptop?** If `pnpm install`, `npm install`, or `corepack enable` fails with TLS errors (`UNABLE_TO_VERIFY_LEAF_SIGNATURE`, `unable to get local issuer certificate`, etc.), you're hitting a MITM proxy. Run `export NODE_TLS_REJECT_UNAUTHORIZED=0` and retry. For the deploy script, pass `--no-verify-ssl`. See `CLAUDE.md` for the longer explanation.
+
 Tech stack: React 18, TypeScript, Vite 8, Tailwind CSS v4, shadcn/ui, TanStack Query v5, React Router v7, Biome.
 
 ## MCP Tools

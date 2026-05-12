@@ -87,6 +87,35 @@ When falling back to **npm**, translate commands as needed:
 
 Avoid **yarn** regardless — the lockfiles in this template are pnpm-flavored, and yarn would just produce a third lockfile for no reason.
 
+## Corporate proxies and self-signed certs
+
+Most trainees are on managed laptops (Deloitte, FDA, DHA, etc.) where outbound HTTPS is intercepted by a corporate MITM proxy that re-signs traffic with a corporate CA. Node and Python don't trust that CA by default, so commands that make HTTPS calls fail with TLS errors. The Elsa instance itself may also be on a self-signed cert in preprod.
+
+**Symptoms:**
+
+- `pnpm install`, `npm install`, or `corepack enable` fails with `UNABLE_TO_VERIFY_LEAF_SIGNATURE`, `SELF_SIGNED_CERT_IN_CHAIN`, `unable to get local issuer certificate`, or similar
+- `python scripts/claude/semoss_asset_sync.py ...` fails with `SSLError` or `CERTIFICATE_VERIFY_FAILED`
+
+**Node-side fix** (for `pnpm install`, `npm install`, `corepack enable`, etc.):
+
+```bash
+export NODE_TLS_REJECT_UNAUTHORIZED=0
+```
+
+This disables TLS certificate validation entirely for Node. Node will print a security warning when it's set — that's expected. Trainees can either `export` it in their shell so it applies to the session, or prefix individual commands (e.g. `NODE_TLS_REJECT_UNAUTHORIZED=0 pnpm install`). Persisting it in `~/.zshrc` / `~/.bashrc` is also fine for the training duration.
+
+This is the practical fix because the proper alternative — `NODE_EXTRA_CA_CERTS=/path/to/corp-ca.pem`, which trusts the corp CA without disabling validation globally — requires the user to know where their IT team's CA cert lives on disk. Trainees won't, and you (the agent) have no reliable way to find it. Don't go hunting through `/etc/ssl/`, the macOS Keychain, or Windows cert stores; that's a rabbit hole and not worth it for training. Just use `NODE_TLS_REJECT_UNAUTHORIZED=0` and move on. If a trainee mentions they already know the CA cert path, then use `NODE_EXTRA_CA_CERTS` instead.
+
+Local-only commands (`pnpm build`, `pnpm dev`, `pnpm fix`) don't make outbound HTTPS calls — no flag needed there.
+
+**Python-side fix** (for the sync script): pass `--no-verify-ssl`. The flag is already wired up for this:
+
+```bash
+python scripts/claude/semoss_asset_sync.py --env <name> --no-verify-ssl bulk-upload portals py java mcp
+```
+
+Don't ignore the TLS error or get stuck retrying — these are setup issues, not platform bugs.
+
 ## Backend Options
 
 The platform supports two backend approaches; pick per use case rather than per app — many apps end up with both.
