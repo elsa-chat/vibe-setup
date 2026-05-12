@@ -109,13 +109,12 @@ If Python isn't available, skip the sync script and drag files in manually. Open
 <base_url><web_module_url>/packages/client/dist/#/app/<app_id>/edit
 ```
 
-The Elsa editor only accepts zip files, not raw folders. Have your agent bundle the asset directories first — on macOS and Windows 10+ a single `tar` command does the job:
+The Elsa editor only accepts zip files, not raw folders. Have your agent bundle the asset directories first using the platform-native command:
 
-```bash
-tar -a -c -f elsa-bundle.zip portals py java mcp
-```
+- **macOS / Linux:** `zip -r elsa-bundle.zip portals py java mcp`
+- **Windows:** `powershell -Command "Compress-Archive -Path portals,py,java,mcp -DestinationPath elsa-bundle.zip -Force"`
 
-(On Linux, use `zip -r elsa-bundle.zip portals py java mcp` instead — GNU tar doesn't speak zip.)
+(Note: don't use `tar` here — Git Bash on Windows silently shadows the native `tar.exe` with GNU tar, which produces a tar file with a `.zip` extension that Elsa rejects.)
 
 Then drag `elsa-bundle.zip` into the editor, **check the "unzip" checkbox** (so Elsa extracts the archive instead of leaving it as a single file), and click **"Compile and publish the app"** — that one button compiles any Java sources and publishes the project so the new assets become visible.
 

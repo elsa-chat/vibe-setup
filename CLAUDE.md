@@ -259,13 +259,20 @@ python scripts/claude/semoss_asset_sync.py --env <name> delete <remote/path> --y
 
 If Python isn't available, replace step 4 with a manual upload through the Elsa UI editor. The editor **only accepts zip files** (not raw folders), so the agent should bundle the asset directories into a single zip first, then have the user drag that zip in.
 
-**1. Bundle the assets.** From the project root, use `tar` (built into macOS and Windows 10+):
+**1. Bundle the assets.** From the project root, use the platform-native command:
 
-```bash
-tar -a -c -f elsa-bundle.zip portals py java mcp
-```
+- **macOS / Linux:**
+  ```bash
+  zip -r elsa-bundle.zip portals py java mcp
+  ```
+- **Windows:** shell out to PowerShell so it works the same regardless of which shell Claude Code is running in (cmd, PowerShell, Git Bash, WSL):
+  ```bash
+  powershell -Command "Compress-Archive -Path portals,py,java,mcp -DestinationPath elsa-bundle.zip -Force"
+  ```
 
-The `-a` flag tells tar to pick the archive format from the file extension (so `.zip` produces a zip). This single command works on both macOS and Windows. On Linux the GNU `tar` doesn't speak zip — use `zip -r elsa-bundle.zip portals py java mcp` instead. Skip any directories the project doesn't have.
+Don't use `tar` here. Windows ships BSD tar that *can* produce zip via `tar -a`, but when Git Bash is on PATH it silently shadows that binary with GNU tar (which doesn't speak zip format) and produces a tar file with a `.zip` extension. Elsa rejects it with "zip END header not found". `zip` and `Compress-Archive` are unambiguous — they always produce real zips.
+
+If only some of `portals/`, `py/`, `java/`, `mcp/` exist in the project, drop the missing ones from the path list. A fresh template clone has all four.
 
 **2. Open the editor** in a browser, where `<app_id>` is the project's `app_id` from `environments.json`:
 
