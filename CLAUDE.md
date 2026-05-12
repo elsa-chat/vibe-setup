@@ -364,6 +364,42 @@ The primary SDK hook in any MCP-tool UI is `useInsight()` from `@semoss/sdk/reac
 
 `ExampleComponent.tsx` shows the full lifecycle: prefill from `tool.parameters`, call a reactor with `actions.run()`, hand the result back via `sendMCPResponseToPlayground()`, and restore past results from `tool.tool_response`. Keep that file (or a copy of it) around as the reference until trainees have the pattern memorized.
 
+### Prefilling parameters from Elsa
+
+When Elsa chat invokes an `ask`-mode tool with a custom UI, the LLM has already picked values for the tool's declared parameters. The job of the React component is to read those values out of `tool.parameters`, hydrate local state with them, and (depending on the tool) either auto-run or wait for the user to confirm. Getting this wrong is the most common reason a custom UI feels "broken" — fields stay empty, the user has to retype what the LLM already supplied, or past executions render blank.
+
+**The three states a UI has to handle:**
+
+| State | Detection | What to do |
+|---|---|---|
+| Opened standalone (not from chat) | `tool` is `undefined` / falsy | Render empty form; don't try to read `tool.parameters` |
+| Fresh invocation from Elsa | `tool` exists, `tool.tool_response` is falsy | Prefill from `tool.parameters`; optionally auto-run |
+| Viewing a past execution | `tool.tool_response` is truthy | Restore the previous result; prefill inputs from `tool.executedParameters` (with `tool.parameters` as fallback); mark the UI as "already sent" so it doesn't re-submit |
+
+The branching belongs in a single `useEffect` depending on `tool` (which is stable from `useInsight()`), plus any handlers the effect calls. The example in `ExampleComponent.tsx` lines 74–93 is the canonical shape; copy it.
+
+**Reading values out of `tool.parameters`:**
+
+- The field names in `tool.parameters` exactly match the keys declared in the tool's input schema (`mcp/py_mcp.json` or `mcp/pixel_mcp.json`). If the schema says `city`, read `tool.parameters?.city`. Typos here are silent — the field just stays empty.
+- The LLM may omit optional fields. Always default each read (`(tool.parameters?.city as string) || ""`) — don't assume every declared key will be present.
+- Values arrive as whatever JSON type the schema declared (string, number, boolean, array, object). The SDK types `tool.parameters` loosely, so a cast or coercion is usually needed before stuffing it into a typed `useState`. For numeric inputs bound to `<Input type="number">`, coerce with `Number(...)` or `String(...)` depending on which side needs it.
+- For past-execution restore, prefer `tool.executedParameters` over `tool.parameters` — the former is what actually ran, the latter is what the LLM proposed (which may differ if the user edited the form before submitting).
+
+**Auto-run vs wait-for-user:**
+
+If the tool is `ask`-mode but the prefilled params are complete and the action is cheap/safe, auto-running on prefill is a nice UX — the user sees the result immediately and just clicks "Send to Elsa." If the action is expensive, destructive, or commonly needs editing, prefill the inputs but wait for the user to click the run button. `ExampleComponent.tsx` auto-runs because fetching a weather forecast is cheap and idempotent.
+
+**Disambiguating when multiple tools share a route:**
+
+If two MCP tools point to the same `resourceURI`, both invocations render the same component. Inspect `tool.parameters` (e.g. presence of a specific key) or add a discriminator field to each tool's schema to figure out which one is calling. Usually it's cleaner to give each tool its own route — share only when the UIs are genuinely the same.
+
+**Common failure modes to avoid:**
+
+- Reading `tool.inputs` instead of `tool.parameters` — `tool.inputs` doesn't exist; the field just comes back `undefined` and the form stays empty.
+- Forgetting the standalone case — accessing `tool.parameters` without first guarding on `tool` throws when the page is opened directly via the app view URL.
+- Ignoring `tool.tool_response` — past executions render with empty inputs and no result, which looks like a bug.
+- Casting the whole `tool.parameters` object to a specific shape without defaulting each field — works on the happy path, breaks the moment the LLM omits an optional arg.
+
 ### Default UI vs custom UI
 
 Each MCP tool either uses Elsa's auto-generated form or a custom React UI in `client/`. The decision lives in the `resourceURI` field of the tool's MCP metadata:
