@@ -40,3 +40,4 @@ screenshots/*
 # Local config files — gitignored, copy from .example to get started.
 .mcp.json
 semoss_config/environments.json
+.claude/worktrees/*
