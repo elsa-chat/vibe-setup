@@ -1,6 +1,6 @@
 {
 	"_meta": {
-		"note": "Declares Python MCP tools exposed by this app. Edit by hand to add or modify entries, or regenerate from py/mcp_driver.py via MakePythonMCP(<project_id>) in Elsa."
+		"note": "Declares Python MCP tools exposed by this app. Edit directly when adding or changing tools — each entry mirrors the corresponding function in py/mcp_driver.py."
 	},
 	"tools": [
 		{

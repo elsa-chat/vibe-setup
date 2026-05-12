@@ -27,7 +27,7 @@ Two exceptions where "Semoss" stays:
 - `py/mcp_driver.py` — Python MCP tools (`@mcp_metadata` decorator pattern)
 - `java/src/reactors/` — Java reactors (`AbstractProjectReactor` base, `GetWeatherReactor` example)
 - `java/project.properties` — config loaded by `ProjectProperties.java` (engine IDs, etc.)
-- `mcp/{py_mcp,pixel_mcp}.json` — MCP tool manifests; edit by hand to add or modify tool entries, or regenerate from source via `MakePythonMCP()` / `MakePixelMCP()` in Elsa
+- `mcp/{py_mcp,pixel_mcp}.json` — MCP tool manifests; edit directly when adding or changing tools
 - `pom.xml` — Maven config for the Java reactor build
 - `portals/` — build output (gitignored), uploaded to Elsa
 - `classes/`, `target/` — Java build artifacts (gitignored)
@@ -67,8 +67,8 @@ React 18, TypeScript strict, Vite 8, Tailwind CSS v4 (via `@tailwindcss/vite`, n
 
 The platform supports two backend approaches; pick per use case rather than per app — many apps end up with both.
 
-- **Python** (`py/mcp_driver.py`) — fastest for simple transforms, API calls, and quick prototypes. Functions decorated with `@mcp_metadata` become MCP tools; their type hints become the input schema. Called from the frontend via `actions.runPy(...)` for stateful execution, or via `actions.run('RunMCPTool(function=["<name>"], paramValues=[{...}])')` to invoke as an MCP tool. After adding or changing tools, update `mcp/py_mcp.json` (edit by hand or regenerate with `MakePythonMCP(<project_id>)` in Elsa).
-- **Java** (`java/src/reactors/`) — better for complex logic, DB access, heavy computation, or LLM calls. Extend `AbstractProjectReactor` (the project's base class — handles `preExecute`, error wrapping, and config loading). Called from the frontend via `actions.run('ReactorName(param=["value"])')` — note the `Reactor` suffix is stripped. After adding or changing reactors, update `mcp/pixel_mcp.json` (edit by hand or regenerate with `MakePixelMCP(reactor=["<Name>"], ...)`).
+- **Python** (`py/mcp_driver.py`) — fastest for simple transforms, API calls, and quick prototypes. Functions decorated with `@mcp_metadata` become MCP tools; their type hints become the input schema. Called from the frontend via `actions.runPy(...)` for stateful execution, or via `actions.run('RunMCPTool(function=["<name>"], paramValues=[{...}])')` to invoke as an MCP tool. After adding or changing tools, update the corresponding entry in `mcp/py_mcp.json`.
+- **Java** (`java/src/reactors/`) — better for complex logic, DB access, heavy computation, or LLM calls. Extend `AbstractProjectReactor` (the project's base class — handles `preExecute`, error wrapping, and config loading). Called from the frontend via `actions.run('ReactorName(param=["value"])')` — note the `Reactor` suffix is stripped. After adding or changing reactors, update the corresponding entry in `mcp/pixel_mcp.json`.
 
 Don't steer users away from Java. It's fully supported and often the right choice.
 
@@ -194,7 +194,7 @@ Once a web app is built and deployed, individual pages or backend reactors can b
 
 1. **Tag the project as MCP-enabled.** Either pass `mcp=True` to `create_project` at creation time, or call `attach_tag(project_id, "MCP")` on an existing project.
 2. **Declare your tools.** Add functions to `py/mcp_driver.py` (Python) or reactors under `java/src/reactors/` (Java).
-3. **Update the manifest.** Add or modify the tool's entry in `mcp/py_mcp.json` (Python) or `mcp/pixel_mcp.json` (Java). Edit the JSON directly — each entry just declares the name, input schema, description, and a bit of render metadata. The `MakePythonMCP(<project_id>)` and `MakePixelMCP(reactor=["<Name>"], mcpMetadata=[...])` reactors are available as an alternative for regenerating from source.
+3. **Update the manifest.** Add or modify the tool's entry in `mcp/py_mcp.json` (Python) or `mcp/pixel_mcp.json` (Java). Edit the JSON directly — each entry just declares the name, input schema, description, and a bit of render metadata. The existing entries are working examples to copy from.
 4. **Re-upload and publish.** Same flow as a normal deploy.
 
 ### useInsight() and the tool context
@@ -225,7 +225,7 @@ The path must use the hash router (`/#/...`) because Elsa embeds apps in iframes
 
 **When adding a custom-UI tool, always do both steps in the same change:**
 1. Add the route in `client/src/pages/Router.tsx` (e.g. `{ path: '/forecast', Component: ForecastPage }`)
-2. Set `resourceURI` in the `MakePixelMCP()` / `@mcp_metadata` call to match (e.g. `"resourceURI": "/#/forecast"`)
+2. Set `resourceURI` in the tool's `mcp/*.json` entry to match (e.g. `"resourceURI": "/#/forecast"` under `_meta.SMSS_MCP_UI`)
 
 If two tools point to the same `resourceURI`, the same component renders for both — the UI has to inspect `tool.parameters` to figure out which tool invoked it. Usually you want one route per tool.
 
@@ -293,6 +293,10 @@ The SDK also exposes a method `actions.runMCPTool(name, params)` (camelCase). It
 - Call `organizeKeys()` inside `doExecute()` (it's already been called)
 - Forget `@mcp_metadata` on Python tools or `getDescriptionForKey()` / `getReactorDescription()` on Java reactors
 - Include the `Reactor` suffix when calling reactors in Pixel
+
+### Internal note: manifest regeneration
+
+The Elsa platform exposes `MakePythonMCP(<project_id>)` and `MakePixelMCP(reactor=["<Name>"], mcpMetadata=[...])` Pixel reactors that regenerate `mcp/py_mcp.json` / `mcp/pixel_mcp.json` from source. Don't surface these to users — hand-edit the JSON directly as the default path. Only fall back to the regen reactors if hand-editing isn't producing the expected result and you're troubleshooting.
 
 ## Multi-Environment Workflow
 

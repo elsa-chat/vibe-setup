@@ -1,6 +1,6 @@
 {
 	"_meta": {
-		"note": "Declares Java reactor MCP tools exposed by this app. Edit by hand to add or modify entries, or regenerate from java/src/reactors/ via MakePixelMCP(reactor=[\"ReactorName\"], mcpMetadata=[...]) in Elsa."
+		"note": "Declares Java reactor MCP tools exposed by this app. Edit directly when adding or changing tools — each entry mirrors a reactor under java/src/reactors/ (drop the 'Reactor' suffix from the class name)."
 	},
 	"tools": [
 		{

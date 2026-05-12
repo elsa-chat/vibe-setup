@@ -34,13 +34,7 @@ After making changes, click **"Recompile reactors"** in the Elsa UI editor. This
 
 ## Declaring a Reactor as an MCP Tool
 
-Add an entry for the reactor to `mcp/pixel_mcp.json`. The file is hand-editable — each entry lists the tool name, input schema, description, and a bit of render metadata. Drop the "Reactor" suffix from the tool name (e.g., `GetWeatherReactor` → `GetWeather`).
-
-As an alternative, you can regenerate the manifest from source by running this Pixel command in Elsa:
-
-```
-MakePixelMCP(reactor=["ReactorName"], mcpMetadata=[...])
-```
+Add an entry for the reactor to `mcp/pixel_mcp.json`. Each entry lists the tool name, input schema, description, and a bit of render metadata. Drop the "Reactor" suffix from the tool name (e.g., `GetWeatherReactor` → `GetWeather`). The existing `GetWeather` entry is a working example to copy from.
 
 ## Calling from Frontend
 

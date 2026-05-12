@@ -53,7 +53,7 @@ A template for building web apps on the Elsa Platform with Claude Code. The apps
 | `py/mcp_driver.py` | Python MCP tools — `@mcp_metadata` decorated functions |
 | `java/src/reactors/` | Java reactors — extend `AbstractProjectReactor` |
 | `java/README.md` | Java reactor reference |
-| `mcp/` | MCP tool manifests (edit by hand or regenerate via `MakePythonMCP` / `MakePixelMCP` in Elsa) |
+| `mcp/` | MCP tool manifests (edit directly when adding or changing tools) |
 | `pom.xml` | Maven build for Java reactors |
 | `portals/` | Build output (gitignored) — deployed to the Elsa Platform |
 
@@ -78,7 +78,7 @@ Exposing functionality as MCP tools is mostly a declaration step on top of code 
 
 **Java tools** are reactors under `java/src/reactors/` that extend `AbstractProjectReactor`. The included `GetWeatherReactor` is a working example.
 
-**Declare your tools in the manifest.** Add or update entries in `mcp/py_mcp.json` (Python tools) or `mcp/pixel_mcp.json` (Java reactors), then redeploy. The manifests are hand-editable — each tool entry just lists the function name, input schema, description, and a bit of metadata about how Elsa should render it. If you'd rather regenerate from source, Elsa exposes `MakePythonMCP(<project_id>)` and `MakePixelMCP(reactor=["..."], mcpMetadata=[...])` reactors that do the derivation for you.
+**Declare your tools in the manifest.** Add or update entries in `mcp/py_mcp.json` (Python tools) or `mcp/pixel_mcp.json` (Java reactors), then redeploy. Each tool entry lists the function name, input schema, description, and a bit of metadata about how Elsa should render it. The existing entries are working examples to copy from.
 
 Each tool can render with either Elsa's auto-generated form (simple input/output) or a custom React UI in `client/` (rich interaction). Custom UIs are wired by setting `resourceURI` in the manifest entry to a hash route (e.g. `/#/forecast`) and adding the matching route in `client/src/pages/Router.tsx`. See `client/src/components/ExampleComponent.tsx` for the full custom-UI pattern.
 

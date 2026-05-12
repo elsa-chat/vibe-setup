@@ -3,8 +3,7 @@
 # These are simple Python tools that can be exposed as MCP tools in Elsa chat.
 # When an MCP tool has no resourceURI, Elsa auto-generates a basic form for it.
 #
-# After adding or changing tools here, update mcp/py_mcp.json — either edit it by hand
-# or regenerate by running MakePythonMCP(<project_id>) in Elsa.
+# After adding or changing tools here, update the corresponding entry in mcp/py_mcp.json.
 #
 # The temperature converters below are TEMPLATE examples — replace them with your own tools.
 
