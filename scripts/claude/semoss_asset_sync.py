@@ -1,7 +1,7 @@
 """Upload local assets to SEMOSS or sync remote assets to local.
 
-Reads project config from semoss_config/config.json and credentials from
-.mcp.json (Claude Code format) or .vscode/mcp.json (Copilot format).
+Reads project config from semoss_config/environments.json and credentials
+from semoss_config/credentials.env, selected by --env <name>.
 
 Usage:
     python scripts/semoss_asset_sync.py upload portals/index.html
@@ -19,8 +19,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
-import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -35,9 +33,6 @@ from urllib.request import Request, urlopen
 
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
-CLAUDE_MCP_CONFIG_PATH = WORKSPACE_ROOT / ".mcp.json"
-COPILOT_MCP_CONFIG_PATH = WORKSPACE_ROOT / ".vscode" / "mcp.json"
-SEMOSS_CONFIG_PATH = WORKSPACE_ROOT / "semoss_config" / "config.json"
 ENVIRONMENTS_CONFIG_PATH = WORKSPACE_ROOT / "semoss_config" / "environments.json"
 CREDENTIALS_ENV_PATH = WORKSPACE_ROOT / "semoss_config" / "credentials.env"
 DEFAULT_HOST = "https://your-instance.example.com"
@@ -45,85 +40,6 @@ DEFAULT_API_MODULE_URL = "/Monolith"
 DEFAULT_WEB_MODULE_URL = "/SemossWeb"
 SERVER_NAME = "Semoss_project_manager"
 BACKUP_ROOT = WORKSPACE_ROOT / "temp" / "semoss_backups"
-
-_ENV_VAR_PATTERN = re.compile(r"\$\{env:([^}]+)\}")
-
-
-def resolve_env_vars(value: str) -> str:
-    """Replace ${env:VAR_NAME} references with their environment variable values."""
-
-    def _replacer(match: re.Match) -> str:
-        var_name = match.group(1)
-        env_value = os.environ.get(var_name)
-        if env_value is None:
-            raise RuntimeError(
-                f"Environment variable '{var_name}' is not set. "
-                f"Set it with: export {var_name}=your-value"
-            )
-        return env_value
-
-    return _ENV_VAR_PATTERN.sub(_replacer, value)
-
-
-def read_json_config(config_path: Path) -> dict[str, object]:
-    if not config_path.exists():
-        raise SystemExit(
-            f"SEMOSS config was not found at {config_path}. "
-            "Create semoss_config/config.json with at least a project_id."
-        )
-
-    raw_text = config_path.read_text(encoding="utf-8").strip()
-    if not raw_text:
-        return {}
-
-    data = json.loads(raw_text)
-    if not isinstance(data, dict):
-        raise SystemExit(f"SEMOSS config at {config_path} must be a JSON object.")
-    return data
-
-
-def extract_config_value(config: dict[str, object], *keys: str) -> str:
-    for key in keys:
-        value = config.get(key)
-        if value is None:
-            continue
-        text = str(value).strip()
-        if text:
-            return text
-    return ""
-
-
-def load_semoss_config(config_path: Path) -> dict[str, str]:
-    raw_config = read_json_config(config_path)
-    return {
-        "project_id": extract_config_value(
-            raw_config,
-            "project_id",
-            "projectId",
-            "PROJECT_ID",
-            "app_id",
-            "appId",
-            "APP_ID",
-            "Project ID / APP ID",
-        ),
-        "base_url": extract_config_value(raw_config, "base_url", "baseUrl", "BASE_URL") or DEFAULT_HOST,
-        "api_module_url": extract_config_value(
-            raw_config,
-            "api_module_url",
-            "apiModuleUrl",
-            "API_MODULE_URL",
-            "module",
-            "Module",
-        )
-        or DEFAULT_API_MODULE_URL,
-        "web_module_url": extract_config_value(
-            raw_config,
-            "web_module_url",
-            "webModuleUrl",
-            "WEB_MODULE_URL",
-        )
-        or DEFAULT_WEB_MODULE_URL,
-    }
 
 
 def parse_dotenv(env_path: Path) -> dict[str, str]:
@@ -182,64 +98,6 @@ def load_env_credentials(env_name: str) -> tuple[str, str]:
             f"Expected {prefix}_ACCESS_KEY and {prefix}_SECRET_KEY."
         )
     return access_key, secret_key
-
-
-def _extract_bearer_parts_from_server(server: dict) -> tuple[str, str]:
-    """Extract access key and secret from a server's args list."""
-    args = server.get("args", [])
-
-    header_value = None
-    for index, arg in enumerate(args):
-        if arg == "--header" and index + 1 < len(args):
-            header_value = args[index + 1]
-
-    if not header_value:
-        raise RuntimeError(f"No Authorization header found for server '{SERVER_NAME}'.")
-
-    prefix = "Authorization:Bearer"
-    if not header_value.startswith(prefix):
-        raise RuntimeError("Unexpected Authorization header format in MCP config.")
-
-    bearer_value = header_value[len(prefix) :]
-
-    # Resolve ${env:VAR} references (Claude Code MCP syntax)
-    if "${env:" in bearer_value:
-        bearer_value = resolve_env_vars(bearer_value)
-
-    if "YOUR_ACCESS_KEY" in bearer_value or "<accessKey:secretKey>" in bearer_value:
-        raise RuntimeError(
-            "Replace the placeholder access key and secret key values in your MCP config "
-            f"(.mcp.json or .vscode/mcp.json)."
-        )
-
-    access_token, secret = bearer_value.split(":", 1)
-    return access_token.strip(), secret.strip()
-
-
-def load_bearer_parts(claude_config_path: Path, copilot_config_path: Path) -> tuple[str, str]:
-    """Load bearer token parts from .mcp.json (Claude Code) or .vscode/mcp.json (Copilot).
-
-    Tries Claude Code format first ("mcpServers" key), then falls back to
-    Copilot format ("servers" key).
-    """
-    # Try Claude Code .mcp.json first
-    if claude_config_path.exists():
-        config = json.loads(claude_config_path.read_text(encoding="utf-8"))
-        servers = config.get("mcpServers", {})
-        if SERVER_NAME in servers:
-            return _extract_bearer_parts_from_server(servers[SERVER_NAME])
-
-    # Fall back to Copilot .vscode/mcp.json
-    if copilot_config_path.exists():
-        config = json.loads(copilot_config_path.read_text(encoding="utf-8"))
-        servers = config.get("servers", {})
-        if SERVER_NAME in servers:
-            return _extract_bearer_parts_from_server(servers[SERVER_NAME])
-
-    raise SystemExit(
-        f"Could not find MCP server '{SERVER_NAME}' in .mcp.json or .vscode/mcp.json. "
-        "Configure at least one of these files with your SEMOSS credentials."
-    )
 
 
 def build_api_endpoint(semoss_config: dict[str, str]) -> str:
@@ -384,6 +242,11 @@ def delete_remote_asset(server_connection, project_id: str, remote_file_path: st
 
 def publish_project(server_connection, project_id: str) -> object:
     pixel = f"PublishProject(project='{project_id}', release=true);"
+    return run_project_pixel(server_connection, pixel)
+
+
+def compile_app_reactors(server_connection, project_id: str) -> object:
+    pixel = f"CompileAppReactors(project='{project_id}');"
     return run_project_pixel(server_connection, pixel)
 
 
@@ -603,6 +466,7 @@ def bulk_upload_to_semoss(
     *,
     publish: bool = True,
     delete_existing: bool = True,
+    compile_reactors: bool = True,
 ) -> int:
     """Upload many files in one process, reusing one ServerClient and insight.
 
@@ -679,6 +543,13 @@ def bulk_upload_to_semoss(
 
     print(f"Bulk upload complete: {len(uploaded)} uploaded, {len(deleted)} replaced.")
 
+    if compile_reactors:
+        print("Compiling reactors...")
+        compile_result = compile_app_reactors(server_connection, project_id)
+        print(json.dumps(compile_result, indent=2, default=str))
+    else:
+        print("Skipping compile (--no-compile).")
+
     if publish:
         print("Publishing project...")
         result = publish_project(server_connection, project_id)
@@ -703,10 +574,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--env",
         metavar="ENV",
+        required=True,
         help=(
             "Target environment name from semoss_config/environments.json (e.g. dev, prod). "
-            "Reads credentials from semoss_config/credentials.env. "
-            "Falls back to semoss_config/config.json + .mcp.json if omitted."
+            "Reads credentials from semoss_config/credentials.env."
         ),
     )
     subparsers = parser.add_subparsers(dest="command")
@@ -724,6 +595,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip the post-upload PublishProject call (useful when chaining multiple uploads).",
     )
+    upload_parser.add_argument(
+        "--no-compile",
+        action="store_true",
+        help="Skip the post-upload CompileAppReactors call (useful when chaining multiple uploads).",
+    )
 
     bulk_parser = subparsers.add_parser(
         "bulk-upload",
@@ -738,6 +614,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-publish",
         action="store_true",
         help="Skip the final PublishProject call (use when chaining multiple bulk-upload invocations).",
+    )
+    bulk_parser.add_argument(
+        "--no-compile",
+        action="store_true",
+        help="Skip the CompileAppReactors call (use when no Java reactor changes were uploaded).",
     )
     bulk_parser.add_argument(
         "--no-delete-existing",
@@ -772,26 +653,40 @@ def build_parser() -> argparse.ArgumentParser:
 def parse_args() -> argparse.Namespace:
     parser = build_parser()
     raw_args = sys.argv[1:]
-    if raw_args and raw_args[0] not in COMMAND_NAMES and raw_args[0] not in {"-h", "--help", "--no-verify-ssl"}:
-        raw_args = ["upload", *raw_args]
+
     if not raw_args:
         parser.print_help()
         raise SystemExit(2)
+
+    # Skip past top-level flags so the "default to upload" shim correctly
+    # identifies whether the next positional is a subcommand or a file path.
+    i = 0
+    while i < len(raw_args):
+        token = raw_args[i]
+        if token == "--no-verify-ssl":
+            i += 1
+        elif token == "--env" and i + 1 < len(raw_args):
+            i += 2
+        elif token.startswith("--env="):
+            i += 1
+        else:
+            break
+
+    if i < len(raw_args) and raw_args[i] not in COMMAND_NAMES and raw_args[i] not in {"-h", "--help"}:
+        raw_args = [*raw_args[:i], "upload", *raw_args[i:]]
+
     return parser.parse_args(raw_args)
 
 
-def build_semoss_context(verify_ssl: bool = True, env_name: str | None = None) -> tuple[dict[str, str], str, object]:
-    if env_name:
-        semoss_config = load_env_config(env_name)
-        access_token, secret = load_env_credentials(env_name)
-    else:
-        semoss_config = load_semoss_config(SEMOSS_CONFIG_PATH)
-        access_token, secret = load_bearer_parts(CLAUDE_MCP_CONFIG_PATH, COPILOT_MCP_CONFIG_PATH)
+def build_semoss_context(env_name: str, verify_ssl: bool = True) -> tuple[dict[str, str], str, object]:
+    semoss_config = load_env_config(env_name)
+    access_token, secret = load_env_credentials(env_name)
 
     project_id = semoss_config.get("app_id") or semoss_config.get("project_id")
     if not project_id:
-        config_hint = f"semoss_config/environments.json (env: {env_name})" if env_name else "semoss_config/config.json"
-        raise SystemExit(f"app_id is not set in {config_hint}.")
+        raise SystemExit(
+            f"app_id is not set in semoss_config/environments.json (env: {env_name})."
+        )
 
     server_connection = build_server_connection(
         endpoint=build_api_endpoint(semoss_config),
@@ -809,6 +704,7 @@ def upload_local_file_to_semoss(
     *,
     assume_yes: bool = False,
     publish: bool = True,
+    compile_reactors: bool = True,
 ) -> int:
     if not local_file.exists() or not local_file.is_file():
         raise SystemExit(f"Local file not found: {local_file}")
@@ -838,6 +734,10 @@ def upload_local_file_to_semoss(
         print(json.dumps(delete_result, indent=2, default=str))
 
         if publish:
+            if compile_reactors:
+                delete_compile_result = compile_app_reactors(server_connection, project_id)
+                print("Compiled reactors after deletion")
+                print(json.dumps(delete_compile_result, indent=2, default=str))
             delete_publish_result = publish_project(server_connection, project_id)
             print("Published project after deletion")
             print(json.dumps(delete_publish_result, indent=2, default=str))
@@ -858,6 +758,13 @@ def upload_local_file_to_semoss(
     print(f"Remote directory: {remote_directory}")
     print(f"Remote asset: {remote_file_path}")
     print(json.dumps(upload_result, indent=2, default=str))
+
+    if compile_reactors:
+        compile_result = compile_app_reactors(server_connection, project_id)
+        print("Compiled reactors after upload")
+        print(json.dumps(compile_result, indent=2, default=str))
+    else:
+        print("Skipping compile (--no-compile).")
 
     if publish:
         publish_result = publish_project(server_connection, project_id)
@@ -938,6 +845,10 @@ def delete_remote_assets(remote_path: str, skip_confirm: bool, verify_ssl: bool 
         except Exception as e:
             print(f"Failed to delete {f}: {e}")
 
+    compile_result = compile_app_reactors(server_connection, project_id)
+    print(f"\nCompiled reactors after deletion")
+    print(json.dumps(compile_result, indent=2, default=str))
+
     publish_result = publish_project(server_connection, project_id)
     print(f"\nPublished project after deletion")
     print(json.dumps(publish_result, indent=2, default=str))
@@ -953,6 +864,7 @@ def bulk_upload_command(
     *,
     no_publish: bool,
     no_delete_existing: bool,
+    no_compile: bool,
     verify_ssl: bool = True,
     env_name: str | None = None,
 ) -> int:
@@ -968,11 +880,15 @@ def bulk_upload_command(
         server_connection=server_connection,
         publish=not no_publish,
         delete_existing=not no_delete_existing,
+        compile_reactors=not no_compile,
     )
 
 
 def publish_command(verify_ssl: bool = True, env_name: str | None = None) -> int:
     _, project_id, server_connection = build_semoss_context(verify_ssl=verify_ssl, env_name=env_name)
+    print(f"Compiling reactors for {project_id}...")
+    compile_result = compile_app_reactors(server_connection, project_id)
+    print(json.dumps(compile_result, indent=2, default=str))
     print(f"Publishing project {project_id}...")
     result = publish_project(server_connection, project_id)
     print(json.dumps(result, indent=2, default=str))
@@ -982,7 +898,7 @@ def publish_command(verify_ssl: bool = True, env_name: str | None = None) -> int
 def main() -> int:
     args = parse_args()
     verify_ssl = not args.no_verify_ssl
-    env_name = args.env or None
+    env_name = args.env
 
     if args.command == "sync-from-remote":
         return sync_semoss_folder_to_local(args.remote_folder, args.local_dir, args.overwrite, verify_ssl=verify_ssl, env_name=env_name)
@@ -995,6 +911,7 @@ def main() -> int:
             args.paths,
             no_publish=args.no_publish,
             no_delete_existing=args.no_delete_existing,
+            no_compile=args.no_compile,
             verify_ssl=verify_ssl,
             env_name=env_name,
         )
@@ -1010,6 +927,7 @@ def main() -> int:
         server_connection,
         assume_yes=args.yes,
         publish=not args.no_publish,
+        compile_reactors=not args.no_compile,
     )
 
 
